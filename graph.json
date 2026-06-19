@@ -27,7 +27,7 @@
       "type": "claim",
       "body": "The core of the research: we want to model spread of cointegration relationships in a way that uses ML in an interpretable manner to boost already existing methods to be better.",
       "documents": [
-        "./01_research_direction/research_proposal.md"
+        { "level": "full", "reference": "references/research_proposal.md", "summary": "" }
       ]
     },
     {

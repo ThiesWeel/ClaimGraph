@@ -30,7 +30,9 @@ If you serve the folder over HTTP (e.g. `python -m http.server 8080`), it will f
       "title": "Short claim title",
       "type": "claim",
       "body": "Full explanation.",
-      "documents": ["path/to/paper.pdf", "https://link"]
+      "documents": [
+        { "level": "full", "reference": "references/paper.pdf", "summary": "summaries/paper.md" }
+      ]
     }
   ],
   "edges": [
@@ -51,6 +53,30 @@ If you serve the folder over HTTP (e.g. `python -m http.server 8080`), it will f
 
 ### Edge types
 `supports` `depends_on` `attacks` `contradicts` `refines`
+
+### Documents
+
+Both nodes and edges can carry a list of `documents`. Each document entry has a `level` and
+up to two local file paths:
+
+| Field | Meaning |
+|---|---|
+| `level: "admin"` | Linked for administrative completeness only. An AI agent traversing the graph does not need to read it. |
+| `level: "summary"` | When an AI agent is following this node, it must read the file in `summary`. |
+| `level: "full"` | When an AI agent is following this node, it must read the original file in `reference`. |
+| `reference` | Local path to the original source document, expected under `references/`. |
+| `summary` | Local path to a condensed summary of that document, expected under `summaries/`. |
+
+A single document entry may set both `reference` and `summary` (e.g. so the same source has
+both a quick summary and the full original available); `level` decides which one matters when
+an agent is actively reasoning over that node.
+
+## Folders
+
+| Folder | Purpose |
+|---|---|
+| `references/` | Original source documents (papers, proposals, notes) linked from nodes/edges at `level: "full"`. |
+| `summaries/` | Condensed summaries of documents in `references/`, linked at `level: "summary"`. |
 
 ## Files
 

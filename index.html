@@ -230,6 +230,13 @@ const EBDG = { supports:'ts', depends_on:'td', attacks:'tk', contradicts:'tco', 
 
 const NW = 144, NH = 42; // node box dimensions
 
+// Document read levels: how an AI agent traversing the graph should treat an attached document.
+const DOC_LEVELS = {
+  admin:   'admin (no read — administrative record only)',
+  summary: 'summary (read summaries/ file when following this node)',
+  full:    'full (read references/ file when following this node)'
+};
+
 const DEFAULT = {
   nodes: [
     { id:"C001", title:"Regime purity boosts OU predictive performance.", type:"claim",
@@ -239,7 +246,8 @@ const DEFAULT = {
     { id:"C003", title:"Level ambiguity in regime-switching modelling approach", type:"question",
       body:"Regime-specific means confound level heterogeneity with dynamic heterogeneity. They do not only capture how the spread behaves, such as fast reversion, slow reversion, or trending. They also capture the absolute level where the spread happened to sit during estimation.", documents:[] },
     { id:"C004", title:"MasterThesis goal", type:"claim",
-      body:"The core of the research: we want to model spread of cointegration relationships in a way that uses ML in an interpretable manner to boost already existing methods to be better.", documents:["./01_research_direction/research_proposal.md"] },
+      body:"The core of the research: we want to model spread of cointegration relationships in a way that uses ML in an interpretable manner to boost already existing methods to be better.",
+      documents:[{ level:"full", reference:"references/research_proposal.md", summary:"" }] },
     { id:"C005", title:"How do we model the hedge ratio relation?", type:"question",
       body:"Moving parameters? or not? when do we deem a cointegration relationship to be not valid enough any more?", documents:[] },
     { id:"C006", title:"u_t ~ I(0), when stationarity 'enough'?", type:"question",
@@ -473,6 +481,57 @@ function typeOpts(list, val, bdg) {
     `<option value="${t}"${t===val?' selected':''}>${t}</option>`).join('');
 }
 
+// ── Documents ─────────────────────────────────────────────────────────────────
+// Each document entry: { level: 'admin'|'summary'|'full', reference: 'references/...', summary: 'summaries/...' }
+// level=admin   -> linked for completeness only, AI does not need to read anything
+// level=summary -> AI must read the `summary` file (in summaries/) when following this node
+// level=full    -> AI must read the `reference` file (in references/) when following this node
+
+function ownerArr(kind) { return kind === 'node' ? G.nodes : G.edges; }
+
+function docRowsHTML(docs, kind, ownerId) {
+  if (!docs.length) return `<div class="im" style="margin-bottom:6px">No documents linked.</div>`;
+  return docs.map((d,i) => `
+    <div style="border:1px solid #eee;border-radius:4px;padding:6px;margin-bottom:6px">
+      <div class="fr"><label>Level</label>
+        <select onchange="setDocField('${kind}','${ownerId}',${i},'level',this.value)">
+          ${Object.keys(DOC_LEVELS).map(l =>
+            `<option value="${l}"${l===d.level?' selected':''}>${DOC_LEVELS[l]}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fr"><label>Reference<br><small style="color:#ccc;font-weight:400">references/...</small></label>
+        <input value="${escA(d.reference||'')}" placeholder="references/file.pdf"
+               onchange="setDocField('${kind}','${ownerId}',${i},'reference',this.value)"/></div>
+      <div class="fr"><label>Summary<br><small style="color:#ccc;font-weight:400">summaries/...</small></label>
+        <input value="${escA(d.summary||'')}" placeholder="summaries/file.md"
+               onchange="setDocField('${kind}','${ownerId}',${i},'summary',this.value)"/></div>
+      <button class="bd sm" onclick="removeDoc('${kind}','${ownerId}',${i})">Remove</button>
+    </div>`).join('');
+}
+
+function setDocField(kind, ownerId, idx, field, val) {
+  const o = ownerArr(kind).find(x=>x.id===ownerId); if(!o||!o.documents) return;
+  o.documents[idx][field] = val.trim();
+  save();
+}
+
+function addDoc(kind, ownerId) {
+  const o = ownerArr(kind).find(x=>x.id===ownerId); if(!o) return;
+  pushUndo();
+  if (!o.documents) o.documents = [];
+  o.documents.push({ level:'admin', reference:'', summary:'' });
+  save(); render();
+  kind==='node' ? editNode(ownerId) : editEdge(ownerId);
+}
+
+function removeDoc(kind, ownerId, idx) {
+  const o = ownerArr(kind).find(x=>x.id===ownerId); if(!o||!o.documents) return;
+  pushUndo();
+  o.documents.splice(idx,1);
+  save(); render();
+  kind==='node' ? editNode(ownerId) : editEdge(ownerId);
+}
+
 function editNode(id) {
   const n = G.nodes.find(x=>x.id===id); if(!n) return;
   openEdit(`
@@ -485,10 +544,10 @@ function editNode(id) {
         <div class="fr"><label>Type</label><select id="e-ty">${typeOpts(NODE_TYPES,n.type)}</select></div>
         <div class="fr"><label>Body</label><textarea id="e-bo">${esc(n.body||'')}</textarea></div>
       </div>
-      <div style="flex:1;min-width:140px">
-        <div class="fr"><label>Documents<br><small style="color:#ccc;font-weight:400">one per line</small></label>
-          <textarea id="e-do" style="min-height:56px">${(n.documents||[]).join('\n')}</textarea>
-        </div>
+      <div style="flex:1;min-width:200px">
+        <div class="fr" style="flex-direction:column"><label>Documents</label></div>
+        ${docRowsHTML(n.documents||[], 'node', id)}
+        <button class="bs sm" style="width:100%" onclick="addDoc('node','${id}')">+ Document</button>
       </div>
     </div>
     <div class="fa">
@@ -509,10 +568,10 @@ function editEdge(id) {
         <div class="fr"><label>Type</label><select id="e-ety">${typeOpts(EDGE_TYPES,e.type)}</select></div>
         <div class="fr"><label>Rationale</label><textarea id="e-ra">${esc(e.rationale||'')}</textarea></div>
       </div>
-      <div style="flex:1;min-width:140px">
-        <div class="fr"><label>Documents<br><small style="color:#ccc;font-weight:400">one per line</small></label>
-          <textarea id="e-edo" style="min-height:56px">${(e.documents||[]).join('\n')}</textarea>
-        </div>
+      <div style="flex:1;min-width:200px">
+        <div class="fr" style="flex-direction:column"><label>Documents</label></div>
+        ${docRowsHTML(e.documents||[], 'edge', id)}
+        <button class="bs sm" style="width:100%" onclick="addDoc('edge','${id}')">+ Document</button>
       </div>
     </div>
     <div class="fa">
@@ -528,7 +587,6 @@ function saveNode(id) {
   n.title     = document.getElementById('e-ti').value.trim();
   n.type      = document.getElementById('e-ty').value;
   n.body      = document.getElementById('e-bo').value.trim();
-  n.documents = lines('e-do');
   save(); render(); editNode(id);
 }
 
@@ -537,7 +595,6 @@ function saveEdge(id) {
   pushUndo();
   e.type      = document.getElementById('e-ety').value;
   e.rationale = document.getElementById('e-ra').value.trim();
-  e.documents = lines('e-edo');
   save(); render(); editEdge(id);
 }
 
