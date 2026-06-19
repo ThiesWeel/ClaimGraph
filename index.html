@@ -130,6 +130,7 @@
   <span id="foldbar" style="display:none;align-items:center;gap:6px;margin-left:14px">
     <span id="foldcount" style="font-size:11px;color:#bbb"></span>
     <button class="bs sm" onclick="foldSelected()">Fold into node</button>
+    <button class="bs sm" onclick="extractSelected()">Extract to new graph</button>
     <button class="bs sm" onclick="clearMultiSel()">Clear selection</button>
   </span>
   <span class="sp"></span>
@@ -298,8 +299,9 @@ let pos          = {};   // { nodeId: {x, y} }
 let sel          = null; // { type:'node'|'edge', id }
 let dragged      = false;
 let clipboard    = null; // copied node
-let currentGraph = 'main';
-let multiSel     = new Set(); // node ids selected (ctrl+click) for folding into one node
+let currentGraph  = 'main';
+let multiSel      = new Set(); // node ids selected (ctrl+click) for folding into one node
+let consolidations = []; // audit/index of fold and extract operations, see consolidations.json
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 // Each "graph" is a separate named thread/tab of reasoning. When served over HTTP it
@@ -427,6 +429,58 @@ async function fetchGraphList() {
   return knownGraphs();
 }
 
+// Save an arbitrary named graph (used when extracting nodes into a brand new graph file)
+// without disturbing the currently open graph/currentGraph.
+async function saveGraphNamed(name, data) {
+  if (window.location.protocol !== 'file:') {
+    await fetch(`/save?graph=${encodeURIComponent(name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data, null, 2)
+    }).catch(() => {});
+  } else {
+    localStorage.setItem(`cg_g_${name}`, JSON.stringify({ nodes: data.nodes, edges: data.edges }));
+    localStorage.setItem(`cg_p_${name}`, JSON.stringify(data.pos || {}));
+  }
+  rememberGraph(name);
+}
+
+// ── Consolidations ───────────────────────────────────────────────────────────
+// consolidations.json is a single, project-wide audit/index of fold and extract
+// operations. It is not the source of structural truth — the graph files are —
+// but it's what makes "where did this summary node come from" reconstructable.
+
+async function loadConsolidations() {
+  if (window.location.protocol !== 'file:') {
+    try {
+      const res = await fetch('/consolidations');
+      if (res.ok) return await res.json();
+    } catch {}
+  }
+  return JSON.parse(localStorage.getItem('cg_consolidations') || '[]');
+}
+
+function saveConsolidations() {
+  localStorage.setItem('cg_consolidations', JSON.stringify(consolidations));
+  if (window.location.protocol === 'file:') return;
+  fetch('/consolidations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(consolidations, null, 2)
+  }).catch(() => {});
+}
+
+function nextConsolidationId() {
+  const max = consolidations.reduce((m,c) => Math.max(m, parseInt((c.id||'').replace(/\D/g,''))||0), 0);
+  return 'CS' + String(max + 1).padStart(3, '0');
+}
+
+function recordConsolidation(rec) {
+  consolidations.push(rec);
+  saveConsolidations();
+  return rec.id;
+}
+
 function initPos() {
   const cv = document.getElementById('cv');
   const W  = cv.clientWidth  || 820;
@@ -546,7 +600,9 @@ function renderSVG() {
             style="pointer-events:none">${esc(lbl)}</text>
       ${lone?`<circle cx="${NW-7}" cy="7" r="4" fill="#fbbf24" title="isolated"/>`:``}
       <circle cx="7" cy="7" r="3.5" fill="${SCLR[n.status]||SCLR.open}" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>
-      ${n.collapsed?`<text x="6" y="${NH-5}" fill="rgba(255,255,255,0.9)" font-size="9" font-family="inherit" style="pointer-events:none">⊕ ${n.children.nodes.length}</text>`:``}
+      ${n.collapsed&&n.children?`<text x="6" y="${NH-5}" fill="rgba(255,255,255,0.9)" font-size="9" font-family="inherit" style="pointer-events:none">⊕ ${n.children.nodes.length}</text>`:``}
+      ${n.portal?`<text x="6" y="${NH-5}" fill="rgba(255,255,255,0.9)" font-size="9" font-family="inherit" style="pointer-events:none">↗ ${esc((n.target_graph||'').slice(0,10))}</text>`:``}
+      ${n.consolidation_id?`<circle cx="${NW-9}" cy="${NH-9}" r="7" fill="#fff" stroke="#ccc" stroke-width="1"/><text x="${NW-9}" y="${NH-6}" text-anchor="middle" font-size="7" font-weight="700" fill="#333" font-family="inherit" style="pointer-events:none">${esc((n.consolidation_id||'').replace(/\D/g,''))}</text>`:``}
     </g>`;
   }).join('');
 }
@@ -651,10 +707,18 @@ function editNode(id) {
     <h3><span class="b" style="background:${NCLR[n.type]||'#888'}">${n.type}</span> ${esc(n.id)} — Node
       <span style="font-weight:400;color:#bbb;font-size:11px">(drag on canvas to reposition · ctrl+click to multi-select for folding)</span>
     </h3>
-    ${n.collapsed ? `<div class="im" style="margin-bottom:8px">
+    ${n.collapsed && n.children ? `<div class="im" style="margin-bottom:8px">
       ⊕ Folded chain: ${n.children.nodes.length} node(s), ${n.children.edges.length} internal edge(s).
+      ${n.consolidation_id?`Consolidation ${esc(n.consolidation_id)}. `:''}
       The body below is what an AI should read by default; expand only if the original chain is needed.
       <button class="bs sm" style="margin-left:6px" onclick="expandNode('${id}')">Expand</button>
+    </div>` : ''}
+    ${n.portal ? `<div class="im" style="margin-bottom:8px">
+      ↗ Extracted to graph <b>${esc(n.target_graph)}</b>.
+      ${n.consolidation_id?`Consolidation ${esc(n.consolidation_id)}. `:''}
+      The body below is what an AI should read by default; open the target graph only if the
+      original detail is needed.
+      <button class="bs sm" style="margin-left:6px" onclick="switchGraph('${escA(n.target_graph)}')">Open ${esc(n.target_graph)}</button>
     </div>` : ''}
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <div style="flex:2;min-width:180px">
@@ -831,13 +895,31 @@ function foldSelected() {
     if (e.to   === '__NEW__') e.to   = newId;
   });
 
+  const consId = nextConsolidationId();
+  const label  = `Folded chain (${ids.length} nodes)`;
+
   G.nodes.push({
-    id: newId, title: `Folded chain (${ids.length} nodes)`, type: 'claim', status: 'settled',
+    id: newId, title: label, type: 'claim', status: 'settled',
     body: '', documents: [],
     collapsed: true,
+    consolidation_id: consId,
     children: { nodes: childNodes, edges: childEdges, boundaryEdges, pos: childPos }
   });
   pos[newId] = { x: cx || 300, y: cy || 300 };
+
+  recordConsolidation({
+    id: consId,
+    created_at: new Date().toISOString(),
+    mode: 'fold_in_place',
+    source_graph: currentGraph,
+    target_graph: currentGraph,
+    source_node_ids: ids,
+    source_edge_ids: childEdges.map(e => e.id),
+    summary_node_id: newId,
+    target_start_node_id: null,
+    label,
+    status: 'active'
+  });
 
   multiSel.clear();
   sel = { type:'node', id:newId };
@@ -860,7 +942,98 @@ function expandNode(id) {
   delete pos[id];
   Object.assign(pos, childPos);
 
+  if (n.consolidation_id) {
+    const rec = consolidations.find(c => c.id === n.consolidation_id);
+    if (rec) { rec.status = 'expanded'; saveConsolidations(); }
+  }
+
   sel = null; closeEdit(); save(); render();
+}
+
+// Move the selected nodes (and the edges between them) into a brand new graph file,
+// leaving a portal node behind in the current graph. Unlike foldSelected, the original
+// nodes/edges are NOT kept inline anywhere in the current graph — they live in the new
+// graph file, and the consolidation record + portal node's target_graph are what make
+// that relationship reconstructable later.
+async function extractSelected() {
+  const ids = [...multiSel];
+  if (ids.length < 2) return;
+
+  const rawName = prompt('New graph name for the extracted nodes (letters, numbers, _ and - only):');
+  if (!rawName) return;
+  const name = rawName.trim().replace(/[^A-Za-z0-9_-]/g, '');
+  if (!name) { alert('Invalid name'); return; }
+
+  const existing = window.location.protocol !== 'file:' ? await fetchGraphList() : knownGraphs();
+  if (existing.includes(name)) { alert('A graph with that name already exists'); return; }
+
+  const label = prompt('Summary label for the portal node left behind:', `Extracted: ${name}`);
+  if (label === null) return;
+
+  pushUndo();
+
+  const idSet         = new Set(ids);
+  const extractedNodes = G.nodes.filter(n => idSet.has(n.id)).map(n => JSON.parse(JSON.stringify(n)));
+  const internalEdges  = [];
+  const boundaryEdges  = [];
+  G.edges.forEach(e => {
+    const fIn = idSet.has(e.from), tIn = idSet.has(e.to);
+    if (fIn && tIn) internalEdges.push(JSON.parse(JSON.stringify(e)));
+    else if (fIn || tIn) boundaryEdges.push(JSON.parse(JSON.stringify(e)));
+  });
+  const extractedPos = {};
+  ids.forEach(id => { if (pos[id]) extractedPos[id] = pos[id]; });
+  const cx = ids.reduce((s,id) => s + (pos[id]?pos[id].x:0), 0) / ids.length;
+  const cy = ids.reduce((s,id) => s + (pos[id]?pos[id].y:0), 0) / ids.length;
+
+  await saveGraphNamed(name, {
+    schema_version: SCHEMA_VERSION, nodes: extractedNodes, edges: internalEdges, pos: extractedPos
+  });
+
+  // Drop the internal edges/nodes from the current graph, remap boundary edges onto the portal node.
+  G.edges = G.edges.filter(e => !internalEdges.some(c => c.id === e.id));
+  G.edges.forEach(e => {
+    if (idSet.has(e.from)) e.from = '__NEW__';
+    if (idSet.has(e.to))   e.to   = '__NEW__';
+  });
+  G.nodes = G.nodes.filter(n => !idSet.has(n.id));
+  ids.forEach(id => delete pos[id]);
+
+  const portalId = nextId('C', G.nodes);
+  G.edges.forEach(e => {
+    if (e.from === '__NEW__') e.from = portalId;
+    if (e.to   === '__NEW__') e.to   = portalId;
+  });
+
+  const consId = nextConsolidationId();
+  const portalLabel = label || `Extracted: ${name}`;
+
+  G.nodes.push({
+    id: portalId, title: portalLabel, type: 'claim', status: 'active',
+    body: '', documents: [],
+    collapsed: true, portal: true,
+    consolidation_id: consId,
+    target_graph: name
+  });
+  pos[portalId] = { x: cx || 300, y: cy || 300 };
+
+  recordConsolidation({
+    id: consId,
+    created_at: new Date().toISOString(),
+    mode: 'extract_to_new_graph',
+    source_graph: currentGraph,
+    target_graph: name,
+    source_node_ids: ids,
+    source_edge_ids: internalEdges.map(e => e.id),
+    summary_node_id: portalId,
+    target_start_node_id: ids[0],
+    label: portalLabel,
+    status: 'active'
+  });
+
+  multiSel.clear();
+  sel = { type:'node', id:portalId };
+  save(); render(); renderFoldBar(); editNode(portalId);
 }
 
 function clearAll() {
@@ -879,6 +1052,9 @@ function validateGraph(g) {
   g.nodes.forEach(n => {
     if (!NODE_TYPES.includes(n.type)) warnings.push(`Node ${n.id}: unknown type "${n.type}"`);
     if (n.status && !STATUS.includes(n.status)) warnings.push(`Node ${n.id}: unknown status "${n.status}"`);
+    if (n.consolidation_id && !consolidations.some(c => c.id === n.consolidation_id)) {
+      warnings.push(`Node ${n.id}: consolidation_id "${n.consolidation_id}" not found in consolidations.json`);
+    }
     (n.documents||[]).forEach((d,i) => {
       if (d.level === 'summary' && !d.summary) warnings.push(`Node ${n.id}: document #${i+1} is level "summary" but has no summary path`);
       if (d.level === 'full' && !d.reference) warnings.push(`Node ${n.id}: document #${i+1} is level "full" but has no reference path`);
@@ -1032,6 +1208,8 @@ function escA(s) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
+  consolidations = await loadConsolidations();
+
   const names = window.location.protocol !== 'file:' ? await fetchGraphList() : knownGraphs();
   const list  = names.length ? names : ['main'];
   const start = localStorage.getItem('cg_current_graph') || list[0];

@@ -18,20 +18,21 @@ Each node/edge can point at local files in `references/` and `summaries/`, tagge
 ClaimGraph itself doesn't read documents or walk the graph, but the field exists so that an
 AI agent doing so can decide whether, and which, attached document it actually needs to read
 for a given node (see [Documents](#documents)). The same token-economy idea applies at the
-structural level: once a chain of nodes has settled, it can be folded into one summary node,
-so an agent revisiting the graph later only needs to read that summary instead of the whole
-chain (see [Folding a chain into one node](#folding-a-chain-into-one-node)).
+structural level: once a chain of nodes has settled, it can be consolidated into one summary
+node, so an agent revisiting the graph later only needs to read that summary instead of the
+whole chain (see [Consolidating chains](#consolidating-chains-fold-vs-extract)).
 
-`serve.py` is optional scaffolding around this: a static file server plus two endpoints
-(`/graphs`, `/save?graph=NAME`) so the browser can list and persist graph files to disk.
-Without it (`file://`), the app still works, just backed by localStorage instead of files.
-It's a local development tool, not a hardened server — see [Files](#files) for the one
-safety property it does guarantee.
+`serve.py` is optional scaffolding around this: a static file server plus endpoints for
+listing/saving graph files (`/graphs`, `/save?graph=NAME`) and for the consolidation audit
+log (`/consolidations`) so the browser can persist them to disk. Without it (`file://`), the
+app still works, just backed by localStorage instead of files. It's a local development tool,
+not a hardened server — see [Files](#files) for the one safety property it does guarantee.
 
 ## How to run
 
 Run `python serve.py` from this folder and open `http://localhost:8080`. This is required for
-multi-graph support (listing/saving `graphs/*.json`) to work against real files.
+multi-graph support and consolidation logging (listing/saving `graphs/*.json` and
+`consolidations.json`) to work against real files.
 
 You can also open `index.html` directly from the filesystem (`file://`) with no server at all;
 in that mode graphs are stored in browser localStorage instead of on disk.
@@ -47,7 +48,10 @@ in that mode graphs are stored in browser localStorage instead of on disk.
 - Import / Export JSON via header buttons
 - State is auto-saved to browser localStorage
 - Multiple named graphs ("tabs") per project, switchable from the header dropdown
-- Long, settled chains of nodes can be folded into a single summary node, and expanded back
+- Long, settled chains of nodes can be consolidated into a single summary node, either folded
+  in place (expandable later) or extracted into their own graph file (a "portal" node)
+- Every consolidation is logged to `consolidations.json`, and the resulting summary node shows
+  a small white badge with its consolidation number
 - Each node carries a `status` (open / active / settled / rejected / needs_test), shown as a coloured dot
 - **Validate** button checks the graph for unknown types, dangling edges, and document invariant violations
 
@@ -90,9 +94,12 @@ graph is a self-contained, reproducible reasoning object rather than content plu
 that only exists in browser localStorage. `schema_version` will be bumped whenever this shape
 changes; files saved without `pos` (pre-dating this) are still loaded fine, just re-laid-out.
 
-A node may optionally carry `"collapsed": true` and a `"children": { nodes, edges, boundaryEdges, pos }`
-object — this is how a [folded chain](#folding-a-chain-into-one-node) is represented. Don't set these
-by hand; use the Fold/Expand UI.
+A node may optionally carry consolidation fields — `"collapsed": true` plus either a
+`"children": { nodes, edges, boundaryEdges, pos }` object (fold-in-place) or `"portal": true` and
+`"target_graph": "..."` (extract-to-new-graph), and in both cases a `"consolidation_id"`
+referencing a record in `consolidations.json`. See
+[Consolidating chains](#consolidating-chains-fold-vs-extract). Don't set these by hand; use the
+Fold/Extract/Expand UI.
 
 ### Node types
 
@@ -176,6 +183,7 @@ the current graph for:
 - unknown node `status`
 - edges whose `from`/`to` point at a node id that doesn't exist
 - documents whose `level` doesn't match the invariant above (e.g. `level: "full"` with no `reference`)
+- a `consolidation_id` that doesn't resolve to a record in `consolidations.json`
 
 This is non-blocking by design: a graph with issues still loads and saves fine, Validate just
 surfaces them so you can decide whether to fix them. Every graph is also silently checked on
@@ -197,25 +205,93 @@ separate graph file under `graphs/`, picked from the dropdown next to the ClaimG
 Offline (`file://`) mode keeps the same per-graph separation in localStorage, just without the
 files on disk.
 
-## Folding a chain into one node
+## Consolidating chains: fold vs. extract
 
 Once a chain of reasoning has settled (no longer actively disputed, or just very long), you can
-fold it into a single node. The intent is that an agent revisiting the graph only has to read
-one summary instead of the whole chain — folding is a manual action you take, not something the
-app decides on its own:
+consolidate it into a single summary node. The intent is that an agent revisiting the graph only
+has to read that one node by default instead of the whole chain — consolidating is a manual
+action you take, not something the app decides on its own. There are two modes:
 
-1. Ctrl+click (or Cmd+click) each node you want to fold — they get a dashed gold outline.
-2. Click **Fold into node** in the header (appears once 2+ nodes are selected).
-3. A new node is created with `collapsed: true`. Edit its `title`/`body` to be the summary an AI
-   should read by default.
-4. The original nodes and the edges between them are preserved verbatim under the new node's
-   `children` field — nothing is deleted. Any edges that crossed the boundary (pointed in from or
-   out to a node outside the folded set) are kept as live edges, just re-pointed at the new node.
-5. Click **Expand** on a folded node at any time to restore the original nodes/edges exactly,
-   including their canvas positions and the original endpoints of boundary edges.
+1. Ctrl+click (or Cmd+click) each node you want to consolidate — they get a dashed gold outline.
+2. With 2+ nodes selected, the header shows two options:
+   - **Fold into node** — keeps everything in the current graph.
+   - **Extract to new graph** — moves the selected nodes into a brand new graph file.
 
-A folded node's `documents` and `body` behave exactly like any other node — set its document
-`level` the same way you would for an unfolded claim.
+### Fold into node
+
+A new node is created in the same graph with `collapsed: true`. The original nodes and the
+edges between them are preserved verbatim under the new node's `children` field — nothing is
+deleted. Any edges that crossed the boundary (pointed in from or out to a node outside the
+folded set) are kept as live edges, just re-pointed at the new node. Edit the new node's
+`title`/`body` to be the summary an AI should read by default.
+
+Click **Expand** on a folded node at any time to restore the original nodes/edges exactly,
+including their canvas positions and the original endpoints of boundary edges.
+
+### Extract to new graph
+
+You're prompted for a new graph name and a summary label. The selected nodes and the edges
+between them are written out as their own file under `graphs/`, exactly like
+[creating a new graph](#multiple-graphs-tabs) would — they are no longer duplicated anywhere in
+the current graph. In their place, a **portal node** is left behind: `collapsed: true`,
+`portal: true`, `target_graph: "<new graph name>"`. Boundary edges are re-pointed at the portal
+node, same as folding.
+
+Unlike fold-in-place, there's no local `children` backup to expand — instead, click the portal
+node's **Open `<graph>`** button (or just pick it from the graph dropdown) to switch into the
+extracted graph and see the original nodes/edges directly. This is the right choice once a
+chain is big enough, or independent enough, that it deserves to be its own thread rather than
+buried inside another one.
+
+A consolidated node's `documents` and `body` behave exactly like any other node — set its
+document `level` the same way you would for an unconsolidated claim.
+
+### The white consolidation badge
+
+Every node created by folding or extracting gets a small white circular badge in its
+bottom-right corner showing the numeric part of its `consolidation_id` (e.g. `CS003` → `3`).
+It's purely a visual cross-reference to `consolidations.json` — there's no interaction on the
+badge itself, just at-a-glance confirmation that "this node is a summary of something, and
+here's its audit record."
+
+### Consolidations (`consolidations.json`)
+
+A single, project-wide (not per-graph) JSON array logging every fold and extract operation.
+Each record:
+
+| Field | Meaning |
+|---|---|
+| `id` | `CS001`, `CS002`, ... |
+| `created_at` | ISO timestamp |
+| `mode` | `fold_in_place` or `extract_to_new_graph` |
+| `source_graph` | Graph the consolidated nodes came from |
+| `target_graph` | Same as `source_graph` for a fold; the new graph's name for an extract |
+| `source_node_ids` | The node ids that were consolidated |
+| `source_edge_ids` | The internal edge ids that were consolidated (edges with both endpoints in `source_node_ids`) |
+| `summary_node_id` | The id of the resulting summary/portal node |
+| `target_start_node_id` | For extracts, which node in the new graph is the natural entry point (the first node you selected); `null` for folds |
+| `label` | The summary node's title/label at the time of consolidation |
+| `status` | `active`, or `expanded` once a fold-in-place node has been expanded back |
+
+This file is an **audit/index, not the source of structural truth** — deleting or corrupting it
+doesn't break any graph; it just makes past consolidations harder to trace. The actual graph
+content always lives in `graphs/*.json`. Validate (see [Validation](#validation)) flags any node
+whose `consolidation_id` doesn't resolve to a record here.
+
+### How an AI should traverse consolidated nodes
+
+By default, read the summary node's `body` and stop there — that's the whole point of
+consolidating a chain. Only go further if the task genuinely requires the original detail:
+
+- For a folded node (`collapsed: true` with a `children` field): expand it, or read
+  `children.nodes`/`children.edges` directly without mutating the graph, to see the original
+  chain.
+- For a portal node (`collapsed: true`, `portal: true`): follow `target_graph` to the
+  corresponding file under `graphs/` to see the original chain there instead.
+
+In both cases, `consolidations.json` is what makes "where did this come from" reconstructable
+even after the fact — look up the node's `consolidation_id` there for `source_node_ids`,
+`source_edge_ids`, and `mode` if the node itself doesn't have enough context.
 
 ## AI suggestion protocol (design intent, not implemented)
 
@@ -251,6 +327,13 @@ proposes a small batch of mutations as data rather than editing `graphs/*.json` 
       "ids": ["C010", "C011", "C012"],
       "summary": "Proposed body for the resulting folded node.",
       "rationale": "Why this chain is settled enough to fold."
+    },
+    {
+      "action": "extract",
+      "ids": ["C020", "C021", "C022"],
+      "target_graph": "new-thread-name",
+      "summary": "Proposed label for the portal node left behind.",
+      "rationale": "Why this chain deserves to be its own graph rather than folded in place."
     }
   ]
 }
@@ -274,8 +357,9 @@ node.
 | File | Purpose |
 |---|---|
 | `index.html` | The entire application |
-| `serve.py` | Static file server plus `/graphs` (list) and `/save?graph=NAME` (persist) endpoints |
+| `serve.py` | Static file server plus `/graphs`, `/save?graph=NAME`, and `/consolidations` endpoints |
 | `graphs/main.json` | Example / seed data (imported on first load when served over HTTP) |
+| `consolidations.json` | Project-wide audit log of fold/extract operations, see [Consolidations](#consolidations-consolidationsjson) |
 | `README.md` | This file |
 
 `serve.py` is meant for local development only — there's no auth and it's not hardened for
