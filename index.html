@@ -228,7 +228,40 @@ const ECLR = {
   motivates:'#ec4899', operationalizes:'#14b8a6'
 };
 
-const NW = 144, NH = 42; // node box dimensions
+const NW = 144, NH = 42; // minimum node box dimensions; actual size grows to fit the title
+const NODE_MAXW = 220;   // wrap title text once a line would exceed this width
+const NODE_FONT = '700 11px system-ui, -apple-system, sans-serif';
+
+let _measureCtx = null;
+function measureText(text) {
+  if (!_measureCtx) _measureCtx = document.createElement('canvas').getContext('2d');
+  _measureCtx.font = NODE_FONT;
+  return _measureCtx.measureText(text).width;
+}
+
+function wrapTitle(title) {
+  const words = String(title || '').split(/\s+/).filter(Boolean);
+  if (!words.length) return [''];
+  const lines = [];
+  let cur = words[0];
+  for (let i = 1; i < words.length; i++) {
+    const test = cur + ' ' + words[i];
+    if (measureText(test) > NODE_MAXW) { lines.push(cur); cur = words[i]; }
+    else cur = test;
+  }
+  lines.push(cur);
+  return lines;
+}
+
+// Box size that guarantees the title fits without truncation: wraps onto as many lines
+// as needed (capped at NODE_MAXW wide) and grows the box height to match.
+function nodeSize(n) {
+  const lines   = wrapTitle(n.title);
+  const longest = lines.reduce((m,l) => Math.max(m, measureText(l)), 0);
+  const w = Math.max(NW, Math.ceil(longest) + 28);
+  const h = Math.max(NH, 24 + lines.length * 13 + 12);
+  return { w, h, lines };
+}
 
 // Document read levels: how an AI agent traversing the graph should treat an attached document.
 const DOC_LEVELS = {
@@ -610,14 +643,19 @@ function renderPanels() {
 }
 
 function renderSVG() {
+  const sizeOf = {};
+  G.nodes.forEach(n => { sizeOf[n.id] = nodeSize(n); });
+
   // ---- Edges ----
   document.getElementById('ge').innerHTML = G.edges.map(e => {
     const fp = pos[e.from], tp = pos[e.to];
     if (!fp || !tp) return '';
+    const fs = sizeOf[e.from] || { w:NW, h:NH };
+    const ts = sizeOf[e.to]   || { w:NW, h:NH };
     const clr  = ECLR[e.type] || '#888';
     const isSel = sel && sel.type==='edge' && sel.id===e.id;
-    const s    = bpt(fp.x, fp.y, tp.x, tp.y);
-    const en   = bpt(tp.x, tp.y, fp.x, fp.y);
+    const s    = bpt(fp.x, fp.y, tp.x, tp.y, fs.w, fs.h);
+    const en   = bpt(tp.x, tp.y, fp.x, fp.y, ts.w, ts.h);
     const mx   = (s.x + en.x) / 2;
     const my   = (s.y + en.y) / 2;
     const noR  = !e.rationale;
@@ -638,41 +676,46 @@ function renderSVG() {
     const clr  = NCLR[n.type] || '#888';
     const isSel = sel && sel.type==='node' && sel.id===n.id;
     const isMulti = multiSel.has(n.id);
-    const lbl  = n.title.length > 19 ? n.title.slice(0,19)+'…' : n.title;
+    const { w:nw, h:nh, lines } = sizeOf[n.id];
     const lone = !G.edges.some(e => e.from===n.id || e.to===n.id);
     const strokeClr = isSel ? '#fff' : isMulti ? '#fbbf24' : 'none';
     const strokeW   = isSel || isMulti ? 2.5 : 0;
+    const titleY    = 16;
+    const tspans    = lines.map((l,i) =>
+      `<tspan x="${nw/2}" y="${titleY + i*13}">${esc(l)}</tspan>`).join('');
+    const idY       = titleY + lines.length*13 + 9;
     return `<g style="cursor:pointer"
-               transform="translate(${p.x-NW/2},${p.y-NH/2})"
+               transform="translate(${p.x-nw/2},${p.y-nh/2})"
                onmousedown="event.stopPropagation();nmd(event,'${n.id}')"
                onclick="event.stopPropagation()">
-      <rect width="${NW}" height="${NH}" rx="7"
+      <rect width="${nw}" height="${nh}" rx="7"
             fill="${clr}" opacity="${isSel?1:0.87}"
             stroke="${strokeClr}" stroke-width="${strokeW}"
             stroke-dasharray="${isMulti&&!isSel?'4 2':'none'}"/>
-      <text x="${NW/2}" y="15" text-anchor="middle" fill="#fff"
+      <text text-anchor="middle" fill="#fff"
             font-size="10" font-weight="700" font-family="inherit"
+            style="pointer-events:none">${tspans}</text>
+      <text x="${nw/2}" y="${idY}" text-anchor="middle" fill="rgba(255,255,255,0.75)"
+            font-size="9" font-family="inherit"
             style="pointer-events:none">${esc(n.id)}</text>
-      <text x="${NW/2}" y="30" text-anchor="middle" fill="rgba(255,255,255,0.9)"
-            font-size="10" font-family="inherit"
-            style="pointer-events:none">${esc(lbl)}</text>
-      ${lone?`<circle cx="${NW-7}" cy="7" r="4" fill="#fbbf24" title="isolated"/>`:``}
+      ${lone?`<circle cx="${nw-7}" cy="7" r="4" fill="#fbbf24" title="isolated"/>`:``}
       <circle cx="7" cy="7" r="3.5" fill="${SCLR[n.status]||SCLR.open}" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>
-      ${n.collapsed&&n.children?`<text x="6" y="${NH-5}" fill="rgba(255,255,255,0.9)" font-size="9" font-family="inherit" style="pointer-events:none">⊕ ${n.children.nodes.length}</text>`:``}
-      ${n.portal?`<text x="6" y="${NH-5}" fill="rgba(255,255,255,0.9)" font-size="9" font-family="inherit" style="pointer-events:none">↗ ${esc((n.target_graph||'').slice(0,10))}</text>`:``}
-      ${n.consolidation_id?`<circle cx="${NW-9}" cy="${NH-9}" r="7" fill="#fff" stroke="#ccc" stroke-width="1"/><text x="${NW-9}" y="${NH-6}" text-anchor="middle" font-size="7" font-weight="700" fill="#333" font-family="inherit" style="pointer-events:none">${esc((n.consolidation_id||'').replace(/\D/g,''))}</text>`:``}
+      ${n.collapsed&&n.children?`<text x="6" y="${nh-5}" fill="rgba(255,255,255,0.9)" font-size="9" font-family="inherit" style="pointer-events:none">⊕ ${n.children.nodes.length}</text>`:``}
+      ${n.portal?`<text x="6" y="${nh-5}" fill="rgba(255,255,255,0.9)" font-size="9" font-family="inherit" style="pointer-events:none">↗ ${esc((n.target_graph||'').slice(0,10))}</text>`:``}
+      ${n.consolidation_id?`<circle cx="${nw-9}" cy="${nh-9}" r="7" fill="#fff" stroke="#ccc" stroke-width="1"/><text x="${nw-9}" y="${nh-6}" text-anchor="middle" font-size="7" font-weight="700" fill="#333" font-family="inherit" style="pointer-events:none">${esc((n.consolidation_id||'').replace(/\D/g,''))}</text>`:``}
     </g>`;
   }).join('');
 }
 
 // Rectangle boundary point (traveling from cx,cy toward tx,ty)
-function bpt(cx, cy, tx, ty) {
+function bpt(cx, cy, tx, ty, w, h) {
+  w = w || NW; h = h || NH;
   const dx = tx-cx, dy = ty-cy;
   const d  = Math.sqrt(dx*dx+dy*dy) || 1;
   const nx = dx/d, ny = dy/d;
   const t  = Math.min(
-    nx ? (NW/2)/Math.abs(nx) : 1e9,
-    ny ? (NH/2)/Math.abs(ny) : 1e9
+    nx ? (w/2)/Math.abs(nx) : 1e9,
+    ny ? (h/2)/Math.abs(ny) : 1e9
   );
   return { x: cx+nx*t, y: cy+ny*t };
 }
@@ -1350,9 +1393,11 @@ function cvMarqueeMouseDown(e) {
       G.nodes.forEach(n => {
         const p = pos[n.id]; if (!p) return;
         // Node positions are in graph space; the marquee rect is in raw canvas space, so
-        // shift by the current pan offset before comparing.
-        const nx0 = p.x + pan.x - NW/2, ny0 = p.y + pan.y - NH/2;
-        const nx1 = p.x + pan.x + NW/2, ny1 = p.y + pan.y + NH/2;
+        // shift by the current pan offset before comparing. Box size varies per node now
+        // that titles wrap instead of truncating, so use each node's actual size.
+        const { w, h } = nodeSize(n);
+        const nx0 = p.x + pan.x - w/2, ny0 = p.y + pan.y - h/2;
+        const nx1 = p.x + pan.x + w/2, ny1 = p.y + pan.y + h/2;
         const overlaps = nx0 < rect.x+rect.w && nx1 > rect.x && ny0 < rect.y+rect.h && ny1 > rect.y;
         if (overlaps) multiSel.add(n.id);
       });

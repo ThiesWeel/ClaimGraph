@@ -44,6 +44,9 @@ in that mode graphs are stored in browser localStorage instead of on disk.
 - Centre: SVG canvas with draggable nodes and coloured arrows. Left-click-drag on empty canvas
   rubber-band selects nodes (ctrl/cmd/shift adds to the selection); right-click-drag pans the
   view. Pan resets on graph switch — it's a viewport offset, not part of the saved graph.
+- Node boxes grow to fit their title (wrapping onto multiple lines if needed) instead of
+  truncating — the title is what you need to read to navigate the graph, so it's never cut off.
+  The node id is shown smaller, below the title.
 - Edit panel: click any node or edge to edit its fields inline
 - Isolated nodes (no edges) are marked with a yellow dot
 - Edges without rationale are shown as dashed lines
