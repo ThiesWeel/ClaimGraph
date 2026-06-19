@@ -1,4 +1,5 @@
 {
+  "schema_version": "0.1.0",
   "nodes": [
     {
       "id": "C001",
@@ -27,7 +28,11 @@
       "type": "claim",
       "body": "The core of the research: we want to model spread of cointegration relationships in a way that uses ML in an interpretable manner to boost already existing methods to be better.",
       "documents": [
-        { "level": "full", "reference": "references/research_proposal.md", "summary": "" }
+        {
+          "level": "full",
+          "reference": "references/research_proposal.md",
+          "summary": ""
+        }
       ]
     },
     {
@@ -168,5 +173,55 @@
       "rationale": "factor/PCA modelling remains open",
       "documents": []
     }
-  ]
+  ],
+  "pos": {
+    "C001": {
+      "x": 500,
+      "y": 102
+    },
+    "C002": {
+      "x": 599,
+      "y": 129
+    },
+    "C003": {
+      "x": 671,
+      "y": 201
+    },
+    "C004": {
+      "x": 698,
+      "y": 300
+    },
+    "C005": {
+      "x": 671,
+      "y": 399
+    },
+    "C006": {
+      "x": 599,
+      "y": 471
+    },
+    "C007": {
+      "x": 500,
+      "y": 498
+    },
+    "C008": {
+      "x": 401,
+      "y": 471
+    },
+    "C009": {
+      "x": 329,
+      "y": 399
+    },
+    "C010": {
+      "x": 302,
+      "y": 300
+    },
+    "C012": {
+      "x": 329,
+      "y": 201
+    },
+    "C013": {
+      "x": 401,
+      "y": 129
+    }
+  }
 }

@@ -14,16 +14,19 @@ itself is the unit that's swapped, not the page: each thread is a JSON file unde
 and a header dropdown switches `G` between them (see [Multiple graphs](#multiple-graphs-tabs)).
 
 Each node/edge can point at local files in `references/` and `summaries/`, tagged with a
-`level` (`admin` / `summary` / `full`) that tells an AI agent walking the graph whether, and
-which, attached document it actually needs to read for that node (see
-[Documents](#documents)). The same token-economy idea applies at the structural level: once
-a chain of nodes has settled, it can be folded into one summary node so an agent revisiting
-the graph reads one node instead of the whole chain (see
-[Folding a chain into one node](#folding-a-chain-into-one-node)).
+`level` (`admin` / `summary` / `full`). This is design intent rather than a built-in agent:
+ClaimGraph itself doesn't read documents or walk the graph, but the field exists so that an
+AI agent doing so can decide whether, and which, attached document it actually needs to read
+for a given node (see [Documents](#documents)). The same token-economy idea applies at the
+structural level: once a chain of nodes has settled, it can be folded into one summary node,
+so an agent revisiting the graph later only needs to read that summary instead of the whole
+chain (see [Folding a chain into one node](#folding-a-chain-into-one-node)).
 
 `serve.py` is optional scaffolding around this: a static file server plus two endpoints
 (`/graphs`, `/save?graph=NAME`) so the browser can list and persist graph files to disk.
 Without it (`file://`), the app still works, just backed by localStorage instead of files.
+It's a local development tool, not a hardened server — see [Files](#files) for the one
+safety property it does guarantee.
 
 ## How to run
 
@@ -50,6 +53,7 @@ in that mode graphs are stored in browser localStorage instead of on disk.
 
 ```json
 {
+  "schema_version": "0.1.0",
   "nodes": [
     {
       "id": "C001",
@@ -70,9 +74,18 @@ in that mode graphs are stored in browser localStorage instead of on disk.
       "rationale": "Why this edge exists.",
       "documents": []
     }
-  ]
+  ],
+  "pos": {
+    "C001": { "x": 220, "y": 140 }
+  }
 }
 ```
+
+This is the full shape of every file in `graphs/`, and of an Export JSON download:
+`schema_version`, `nodes`, `edges`, and `pos` (canvas layout) all live together, so a saved
+graph is a self-contained, reproducible reasoning object rather than content plus a layout
+that only exists in browser localStorage. `schema_version` will be bumped whenever this shape
+changes; files saved without `pos` (pre-dating this) are still loaded fine, just re-laid-out.
 
 A node may optionally carry `"collapsed": true` and a `"children": { nodes, edges, boundaryEdges, pos }`
 object — this is how a [folded chain](#folding-a-chain-into-one-node) is represented. Don't set these
@@ -120,15 +133,22 @@ up to two local file paths:
 
 | Field | Meaning |
 |---|---|
-| `level: "admin"` | Linked for administrative completeness only. An AI agent traversing the graph does not need to read it. |
-| `level: "summary"` | When an AI agent is following this node, it must read the file in `summary`. |
-| `level: "full"` | When an AI agent is following this node, it must read the original file in `reference`. |
+| `level: "admin"` | Linked for administrative completeness only. An agent traversing the graph does not need to read it. |
+| `level: "summary"` | An agent following this node is expected to read the file in `summary`. |
+| `level: "full"` | An agent following this node is expected to read the original file in `reference`. |
 | `reference` | Local path to the original source document, expected under `references/`. |
 | `summary` | Local path to a condensed summary of that document, expected under `summaries/`. |
 
 A single document entry may set both `reference` and `summary` (e.g. so the same source has
 both a quick summary and the full original available); `level` decides which one matters when
-an agent is actively reasoning over that node.
+an agent is actively reasoning over that node. The invariant a document entry should satisfy:
+
+- if `level` is `"summary"`, `summary` should be set
+- if `level` is `"full"`, `reference` should be set
+- if `level` is `"admin"`, neither path is required
+
+This isn't currently enforced by the app — entries that violate it just won't have anything
+useful for an agent to read at that level.
 
 ## Folders
 
@@ -149,8 +169,9 @@ files on disk.
 ## Folding a chain into one node
 
 Once a chain of reasoning has settled (no longer actively disputed, or just very long), you can
-fold it into a single node so an AI revisiting the graph only has to read one summary instead of
-the whole chain:
+fold it into a single node. The intent is that an agent revisiting the graph only has to read
+one summary instead of the whole chain — folding is a manual action you take, not something the
+app decides on its own:
 
 1. Ctrl+click (or Cmd+click) each node you want to fold — they get a dashed gold outline.
 2. Click **Fold into node** in the header (appears once 2+ nodes are selected).
@@ -173,3 +194,8 @@ A folded node's `documents` and `body` behave exactly like any other node — se
 | `serve.py` | Static file server plus `/graphs` (list) and `/save?graph=NAME` (persist) endpoints |
 | `graphs/main.json` | Example / seed data (imported on first load when served over HTTP) |
 | `README.md` | This file |
+
+`serve.py` is meant for local development only — there's no auth and it's not hardened for
+exposure beyond localhost. The one safety property it does enforce: `graph` names passed to
+`/save` are validated against `[A-Za-z0-9_-]+` before being used as a filename, so a request
+can't write outside `graphs/`.

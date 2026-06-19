@@ -298,6 +298,19 @@ let multiSel     = new Set(); // node ids selected (ctrl+click) for folding into
 // Each "graph" is a separate named thread/tab of reasoning. When served over HTTP it
 // lives at graphs/<name>.json on disk; offline (file://) it lives in localStorage only.
 
+const SCHEMA_VERSION = '0.1.0';
+
+// The on-disk/exported shape of a graph: schema_version + nodes + edges + pos, all in one
+// file, so layout is part of the reproducible reasoning object rather than living only in
+// browser localStorage.
+function packGraph() {
+  return { schema_version: SCHEMA_VERSION, nodes: G.nodes, edges: G.edges, pos };
+}
+function unpackGraph(data) {
+  G   = { nodes: data.nodes || [], edges: data.edges || [] };
+  pos = data.pos || {};
+}
+
 function save() {
   localStorage.setItem(`cg_g_${currentGraph}`, JSON.stringify(G));
   localStorage.setItem(`cg_p_${currentGraph}`, JSON.stringify(pos));
@@ -312,7 +325,7 @@ function saveToDisk() {
     fetch(`/save?graph=${encodeURIComponent(currentGraph)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(G, null, 2)
+      body: JSON.stringify(packGraph(), null, 2)
     }).catch(() => {});
   }, 400);
 }
@@ -350,9 +363,13 @@ async function loadGraph(name) {
     try {
       const res = await fetch(`./graphs/${encodeURIComponent(name)}.json`);
       if (res.ok) {
-        G = await res.json();
-        const p = localStorage.getItem(`cg_p_${name}`);
-        pos = p ? JSON.parse(p) : {};
+        const data = await res.json();
+        unpackGraph(data);
+        if (!data.pos) {
+          // Legacy file predating schema_version/pos: fall back to whatever layout we have.
+          const p = localStorage.getItem(`cg_p_${name}`);
+          pos = p ? JSON.parse(p) : {};
+        }
         ensurePos();
       } else {
         loadStorage() || (G = name==='main' ? JSON.parse(JSON.stringify(DEFAULT)) : {nodes:[],edges:[]});
@@ -840,9 +857,9 @@ function clearAll() {
 // ── Import / Export ───────────────────────────────────────────────────────────
 
 function exportJSON() {
-  const blob = new Blob([JSON.stringify(G, null, 2)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify(packGraph(), null, 2)], {type:'application/json'});
   Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(blob), download:'graph.json'
+    href: URL.createObjectURL(blob), download:`${currentGraph}.json`
   }).click();
 }
 
@@ -855,7 +872,9 @@ function onImport(ev) {
     try {
       const d = JSON.parse(e.target.result);
       if (!d.nodes||!d.edges) throw new Error('Expected {nodes, edges}');
-      G=d; pos={}; initPos(); sel=null; closeEdit(); save(); render();
+      unpackGraph(d);
+      if (!d.pos) initPos(); else ensurePos();
+      sel=null; multiSel.clear(); closeEdit(); save(); render();
     } catch(err) { alert('Import error: ' + err.message); }
   };
   r.readAsText(f);
