@@ -108,7 +108,7 @@
       "id": "E003",
       "from": "C005",
       "to": "C004",
-      "type": "refines",
+      "type": "motivates",
       "rationale": "Open design question",
       "documents": []
     },
@@ -116,7 +116,7 @@
       "id": "E004",
       "from": "C006",
       "to": "C004",
-      "type": "refines",
+      "type": "motivates",
       "rationale": "This highly depedns on the final form of the research, but it is soemthing to keep in mind, stationarity acoording to coitnegration test could be insufficient for the pipeline idea.",
       "documents": []
     },
@@ -124,7 +124,7 @@
       "id": "E005",
       "from": "C007",
       "to": "C004",
-      "type": "refines",
+      "type": "motivates",
       "rationale": "suggestion for ML -> itnerpretable",
       "documents": []
     },
@@ -140,7 +140,7 @@
       "id": "E007",
       "from": "C009",
       "to": "C008",
-      "type": "refines",
+      "type": "motivates",
       "rationale": "C008 proposes using AL residuals for gated learning, but this only works if static factor loadings produce valid OU residuals. If time-varying loadings contaminate the residuals, the gating signal is built on a misspecified base.",
       "documents": []
     },
@@ -148,7 +148,7 @@
       "id": "E008",
       "from": "C010",
       "to": "C008",
-      "type": "refines",
+      "type": "motivates",
       "rationale": "The claim in C008 requires specifying which factor model sits upstream. The choice of static vs. adaptive vs. regime-specific loadings directly determines whether the OU adequacy criterion and the gating signal are trustworthy.",
       "documents": []
     },
@@ -156,7 +156,7 @@
       "id": "E010",
       "from": "C012",
       "to": "C008",
-      "type": "refines",
+      "type": "motivates",
       "rationale": "If factor loadings drift within an HMM regime, the OU residual used for gated learning accumulates loading-estimation error throughout the regime. This directly limits how long a gating window can remain valid before the base residual becomes unreliable.",
       "documents": []
     },
@@ -164,7 +164,7 @@
       "id": "E011",
       "from": "C013",
       "to": "C008",
-      "type": "refines",
+      "type": "motivates",
       "rationale": "factor/PCA modelling remains open",
       "documents": []
     }

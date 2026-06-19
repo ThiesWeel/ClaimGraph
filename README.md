@@ -4,10 +4,11 @@ A minimal, single-file GUI for editing structured reasoning graphs.
 
 ## How to run
 
-Open `index.html` in a browser. No server, no install, no build step.
+Run `python serve.py` from this folder and open `http://localhost:8080`. This is required for
+multi-graph support (listing/saving `graphs/*.json`) to work against real files.
 
-If you open it directly from the filesystem (`file://`), the app loads the bundled default graph.
-If you serve the folder over HTTP (e.g. `python -m http.server 8080`), it will fetch `graph.json` on first load.
+You can also open `index.html` directly from the filesystem (`file://`) with no server at all;
+in that mode graphs are stored in browser localStorage instead of on disk.
 
 ## Features
 
@@ -19,6 +20,8 @@ If you serve the folder over HTTP (e.g. `python -m http.server 8080`), it will f
 - Edges without rationale are shown as dashed lines
 - Import / Export JSON via header buttons
 - State is auto-saved to browser localStorage
+- Multiple named graphs ("tabs") per project, switchable from the header dropdown
+- Long, settled chains of nodes can be folded into a single summary node, and expanded back
 
 ## Data model
 
@@ -48,11 +51,44 @@ If you serve the folder over HTTP (e.g. `python -m http.server 8080`), it will f
 }
 ```
 
+A node may optionally carry `"collapsed": true` and a `"children": { nodes, edges, boundaryEdges, pos }`
+object — this is how a [folded chain](#folding-a-chain-into-one-node) is represented. Don't set these
+by hand; use the Fold/Expand UI.
+
 ### Node types
-`claim` `evidence` `argument` `assumption` `question`
+
+| Type | Meaning |
+|---|---|
+| `claim` | A statement you currently believe or want to evaluate |
+| `hypothesis` | A testable empirical claim |
+| `question` | An open uncertainty |
+| `assumption` | A condition required for a claim/model to hold |
+| `evidence` | Result from literature, simulation, backtest, or notebook |
+| `test` | Concrete experiment to run |
+| `counterfactual` | "What if this assumption is false?" |
+| `failure_mode` | A way the reasoning/model can break |
+| `model_choice` | A chosen modelling approach, e.g. OU, ECM, Kalman |
+| `metric` | Evaluation quantity, e.g. Sharpe, CRPS, forecast error |
+| `dataset_scope` | Universe, window, frequency, liquidity filter, etc. |
+| `decision` | Human judgement or selected next direction |
 
 ### Edge types
-`supports` `depends_on` `attacks` `contradicts` `refines`
+
+| Type | Meaning |
+|---|---|
+| `depends_on` | One node requires another to hold |
+| `supports` | Evidence or reasoning increases belief in a claim |
+| `weakens` | Evidence decreases belief in a claim |
+| `refutes` | Evidence directly contradicts a claim |
+| `tests` | A test evaluates a claim/hypothesis/assumption |
+| `controls_for` | A test removes or checks a confounder |
+| `alternative_to` | One model/explanation competes with another |
+| `fails_under` | A claim/model breaks under this condition |
+| `motivates` | One node suggests another direction/question/test |
+| `operationalizes` | Turns an abstract idea into a measurable quantity |
+
+`derived_from` and `implements` are deliberately left out until notebook/code integration
+becomes part of the workflow.
 
 ### Documents
 
@@ -77,11 +113,40 @@ an agent is actively reasoning over that node.
 |---|---|
 | `references/` | Original source documents (papers, proposals, notes) linked from nodes/edges at `level: "full"`. |
 | `summaries/` | Condensed summaries of documents in `references/`, linked at `level: "summary"`. |
+| `graphs/` | One JSON file per graph/tab, e.g. `graphs/main.json`. |
+
+## Multiple graphs (tabs)
+
+A project usually accumulates more than one independent thread of reasoning. Each thread is a
+separate graph file under `graphs/`, picked from the dropdown next to the ClaimGraph title.
+`+ Graph` creates a new, empty one. Switching graphs autosaves the one you're leaving first.
+Offline (`file://`) mode keeps the same per-graph separation in localStorage, just without the
+files on disk.
+
+## Folding a chain into one node
+
+Once a chain of reasoning has settled (no longer actively disputed, or just very long), you can
+fold it into a single node so an AI revisiting the graph only has to read one summary instead of
+the whole chain:
+
+1. Ctrl+click (or Cmd+click) each node you want to fold — they get a dashed gold outline.
+2. Click **Fold into node** in the header (appears once 2+ nodes are selected).
+3. A new node is created with `collapsed: true`. Edit its `title`/`body` to be the summary an AI
+   should read by default.
+4. The original nodes and the edges between them are preserved verbatim under the new node's
+   `children` field — nothing is deleted. Any edges that crossed the boundary (pointed in from or
+   out to a node outside the folded set) are kept as live edges, just re-pointed at the new node.
+5. Click **Expand** on a folded node at any time to restore the original nodes/edges exactly,
+   including their canvas positions and the original endpoints of boundary edges.
+
+A folded node's `documents` and `body` behave exactly like any other node — set its document
+`level` the same way you would for an unfolded claim.
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `index.html` | The entire application |
-| `graph.json` | Example / seed data (imported on first load when served over HTTP) |
+| `serve.py` | Static file server plus `/graphs` (list) and `/save?graph=NAME` (persist) endpoints |
+| `graphs/main.json` | Example / seed data (imported on first load when served over HTTP) |
 | `README.md` | This file |
