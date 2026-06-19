@@ -2,277 +2,147 @@
   "schema_version": "0.1.0",
   "nodes": [
     {
-      "id": "C001",
-      "title": "Regime purity is boosts OU predictive performance.",
+      "id": "N001",
+      "title": "Caching reduces page load time",
       "type": "claim",
-      "body": "If degenerate observations contaminate the OU regime, emission parameters become biased, reducing forecast quality for non degenerate forecasts. Splitting the non degenerate observations and the degenerate observations, allows for better forecast quality.",
-      "documents": [],
-      "status": "open"
+      "status": "active",
+      "body": "Top-level claim this demo graph is organized around: serving cached responses from an edge node should noticeably cut perceived load time for read-heavy traffic.",
+      "documents": []
     },
     {
-      "id": "C002",
-      "title": "What does degeneracy in spread series look like?",
-      "type": "question",
-      "body": "If we want a theoretical proof of concept of with decontaminated OU model(s), we need to first probe somehow what degeneracy looks like: how does it occur? How long does it persist? what kind of models do work in these episodes? and with what parameters, RW + student-t?",
-      "documents": [],
-      "status": "open"
+      "id": "N002",
+      "title": "Edge cache cuts median TTFB by >30%",
+      "type": "hypothesis",
+      "status": "settled",
+      "body": "A testable, falsifiable version of the claim: caching at the edge reduces median time-to-first-byte by more than 30% relative to an uncached baseline, for our current traffic mix.",
+      "documents": []
     },
     {
-      "id": "C003",
-      "title": "Level ambiguity in regime-switching mdoelling approach",
-      "type": "question",
-      "body": "Regime-specific means confound level heterogeneity with dynamic heterogeneity. They do not only capture how the spread behaves, such as fast reversion, slow reversion, or trending. They also capture the absolute level where the spread happened to sit during estimation.\n\nThis makes regime labels unstable. A regime identified as \"fast mean reversion\" may really mean \"fast mean reversion around the historical level seen in training.\" If the spread later shifts to a new level, the model still pulls it toward the old regime level, which may no longer be relevant.\n\nSo the regimes partly describe where the spread was, not just how it behaved. This makes the model locally valid but weak out of samp",
-      "documents": [],
-      "status": "open"
+      "id": "N003",
+      "title": "Traffic is read-heavy (>90% GET requests)",
+      "type": "assumption",
+      "status": "settled",
+      "body": "Caching only helps if most requests are cacheable reads. If the real traffic mix is write-heavy, the hypothesis doesn't even apply.",
+      "documents": []
     },
     {
-      "id": "C004",
-      "title": "MasterThesis goal",
-      "type": "claim",
-      "body": "The core of the research: we want to model spread of cointegration relationships in a way that uses ML in an interpretable manner to boost already existing methods to be better.",
-      "documents": [
-        {
-          "level": "full",
-          "reference": "references/research_proposal.md",
-          "summary": ""
-        }
-      ],
-      "status": "open"
+      "id": "N004",
+      "title": "A/B load test: cached vs. uncached edge",
+      "type": "test",
+      "status": "settled",
+      "body": "Concrete experiment that evaluates N002: run identical synthetic load against a cached and an uncached edge configuration and compare TTFB distributions.",
+      "documents": []
     },
     {
-      "id": "C008",
-      "title": "Avellanda2008 Residual modelling, good candidate for gated learning",
+      "id": "N005",
+      "title": "Staging benchmark: 42% TTFB reduction",
       "type": "evidence",
-      "body": "",
-      "documents": [],
-      "status": "open"
+      "status": "settled",
+      "body": "Result of N004. See the attached document for the full benchmark methodology and numbers.",
+      "documents": [
+        { "level": "summary", "reference": "", "summary": "summaries/cdn-benchmark.md" },
+        { "level": "full", "reference": "references/cdn-benchmark.md", "summary": "" }
+      ]
     },
     {
-      "id": "C009",
-      "title": "Do static factor loadings contaminate the OU residuals?",
-      "type": "question",
-      "body": "In the Avellaneda-Lee architecture, factor loadings beta_i are estimated statically (OLS on a fixed window). If the true loadings are time-varying (beta_{i,t}), the observable residual r_{i,t} - beta_i' F_t contains the contamination term (beta_{i,t} - beta_i)' F_t, which is driven by common factors and is not idiosyncratic. Does this contamination bias the OU parameter estimates (kappa, m, sigma)? Can it create spurious apparent mean-reversion or destroy true mean-reversion? This determines how sensitive the downstream HMM is to the upstream factor model's static assumption.",
-      "documents": [],
-      "status": "open"
-    },
-    {
-      "id": "C010",
-      "title": "Which upstream factor model is compatible with downstream OU/HMM modelling?",
-      "type": "question",
-      "body": "Options range from static PCA (Avellaneda-Lee), rolling-window PCA, regime-specific PCA, Kalman-filter betas (Adrian-Franzoni), to characteristic-instrumented betas (IPCA). Each makes different assumptions about how loadings evolve. The choice affects: \n(1) whether residuals (within an HMM regime) are validly OU; \n(2) whether the OU adequacy diagnostic (kappa, valid fraction) reflects genuine idiosyncratic dynamics or loading-estimation artifacts due to misspecification;",
-      "documents": [],
-      "status": "open"
-    },
-    {
-      "id": "C012",
-      "title": "Are factor loadings approximately constant within an HMM regime?",
-      "type": "question",
-      "body": "The gated learning idea in C008 assumes that within an OU regime, the factor loadings are stable enough that the PCA-defactored residual is a valid OU process. But if factor loadings drift continuously within a regime (as the DCB and Del Negro-Otrok literature shows they do), the residuals accumulate systematic factor-loading error over the regime duration. This error grows with regime length and common factor volatility. The question is: is the within-regime loading drift small enough to be ignored relative to the idiosyncratic OU signal, or does it materially degrade OU parameter estimates and the gating signal?",
-      "documents": [],
-      "status": "open"
-    },
-    {
-      "id": "C013",
-      "title": "Moving Betas and factor, how to manage?",
-      "type": "question",
-      "body": "If we want to trade cumlative residuals, or potnetially EWMA of the residuals, then we can not have bias that accumelates. What are the most advaced methods for this? what makes sense?",
-      "documents": [],
-      "status": "open"
-    },
-    {
-      "id": "C005",
-      "title": "How do we model the hedge ratio relation?",
-      "type": "question",
-      "body": "Moving parameters? or not? when do we deem a cointegration relationship to be not valid enough any more?",
-      "documents": [],
-      "status": "open"
-    },
-    {
-      "id": "C014",
-      "title": "Consolidation task (2 nodes)",
-      "type": "claim",
+      "id": "N006",
+      "title": "Cache invalidation lag can serve stale prices",
+      "type": "failure_mode",
       "status": "needs_test",
-      "body": "[CONSOLIDATION TASKED]",
-      "documents": [],
-      "collapsed": true,
-      "consolidation_id": "CS002",
-      "children": {
-        "nodes": [
-          {
-            "id": "C006",
-            "title": "u_t ~ I(0), when stationarity 'enough'?",
-            "type": "question",
-            "body": "",
-            "documents": [],
-            "status": "open"
-          },
-          {
-            "id": "C007",
-            "title": "Symbolic regression as destillation method?",
-            "type": "question",
-            "body": "this could be a good distil method",
-            "documents": [],
-            "status": "open"
-          }
-        ],
-        "edges": [],
-        "boundaryEdges": [
-          {
-            "id": "E004",
-            "from": "C006",
-            "to": "C004",
-            "type": "motivates",
-            "rationale": "This highly depedns on the final form of the research, but it is soemthing to keep in mind, stationarity acoording to coitnegration test could be insufficient for the pipeline idea.",
-            "documents": []
-          },
-          {
-            "id": "E005",
-            "from": "C007",
-            "to": "C004",
-            "type": "motivates",
-            "rationale": "suggestion for ML -> itnerpretable",
-            "documents": []
-          }
-        ],
-        "pos": {
-          "C006": {
-            "x": 781,
-            "y": 584
-          },
-          "C007": {
-            "x": 575,
-            "y": 576
-          }
-        }
-      }
+      "body": "A way N001/N002 can break in practice: if invalidation lags a price change, customers can see stale (wrong) prices for the TTL window. Needs its own test before this is shipped for pricing-sensitive pages.",
+      "documents": []
+    },
+    {
+      "id": "N007",
+      "title": "TTFB reduction, measured in milliseconds",
+      "type": "metric",
+      "status": "open",
+      "body": "Operationalizes \"page load time\" from N001 into something we can actually measure: time-to-first-byte in ms, median and p99.",
+      "documents": []
+    },
+    {
+      "id": "N008",
+      "title": "Ship edge caching for read-only pages only",
+      "type": "decision",
+      "status": "active",
+      "body": "Given N005's result and the open risk in N006, ship caching for pages with no pricing/inventory data first, and gate pricing pages behind a fix for the invalidation-lag failure mode.",
+      "documents": []
     }
   ],
   "edges": [
     {
       "id": "E001",
-      "from": "C002",
-      "to": "C001",
+      "from": "N002",
+      "to": "N003",
       "type": "depends_on",
-      "rationale": "To come up with some theoretical emulation of the process, we first need to know what the problem looks like in practice",
+      "rationale": "The hypothesis only makes sense if the traffic is actually read-heavy enough for caching to matter.",
       "documents": []
     },
     {
       "id": "E002",
-      "from": "C003",
-      "to": "C002",
-      "type": "depends_on",
-      "rationale": "The general claim of C001 seems trivial, but what the problem looks like, depends in first isntance on how we define regeime switching models in this setting.",
+      "from": "N004",
+      "to": "N002",
+      "type": "tests",
+      "rationale": "This is the concrete experiment that evaluates the hypothesis.",
       "documents": []
     },
     {
       "id": "E003",
-      "from": "C005",
-      "to": "C004",
-      "type": "motivates",
-      "rationale": "Open design question",
+      "from": "N005",
+      "to": "N002",
+      "type": "supports",
+      "rationale": "Benchmark result from running N004: 42% median TTFB reduction supports the >30% hypothesis.",
       "documents": []
     },
     {
       "id": "E004",
-      "from": "C014",
-      "to": "C004",
-      "type": "motivates",
-      "rationale": "This highly depedns on the final form of the research, but it is soemthing to keep in mind, stationarity acoording to coitnegration test could be insufficient for the pipeline idea.",
+      "from": "N007",
+      "to": "N001",
+      "type": "operationalizes",
+      "rationale": "Turns the vague \"load time\" claim into a concrete, measurable quantity.",
       "documents": []
     },
     {
       "id": "E005",
-      "from": "C014",
-      "to": "C004",
-      "type": "motivates",
-      "rationale": "suggestion for ML -> itnerpretable",
+      "from": "N006",
+      "to": "N001",
+      "type": "fails_under",
+      "rationale": "Pricing pages are the case where this claim breaks down without an invalidation fix.",
       "documents": []
     },
     {
       "id": "E006",
-      "from": "C004",
-      "to": "C008",
+      "from": "N002",
+      "to": "N001",
       "type": "supports",
-      "rationale": "Gated Online Learning for Locally Misspecified OU Residual Models:Avellaneda–Lee gives a clean base model for the thesis because it separates stock returns into:\n\n    systematic component + residual component\n\nThis is closely related to the cointegration/stat-arbitrage idea: after removing systematic exposure, the remaining residual process is expected to be more stationary or mean-reverting. In Avellaneda–Lee, this residual component is treated as an OU-like mean-reverting process.\n\nThis is useful for gated online learning because the residual is not always equally useful for updating the model. Some observations may come from clean mean-reverting behavior, while others may come from local misspecification, unstable beta estimation, high-volume information events, structural drift, or degenerate spread episodes.\n\nThe model naturally produces diagnostics that can become gating features:\n\n    1. OU innovations / innovation surprise\n    2. volume or trading-time reliability\n    3. drift pressure / time-trend effects\n    4. beta instability or factor-collinearity\n    5. shadow models that indicate whether the current observation fits the assumed OU residual structure\n\nThe thesis contribution would be something along the lines of:\n\n    Avellaneda–Lee:\n        construct residual -> fit OU -> trade s-score\n\n    Thesis:\n        construct residual -> estimate OU/regime state online -> gate or downweight unreliable observations -> improve predictive modelling of the residual process\n\nSo the paper gives the deterministic/statistical foundation, while the thesis adds adaptive online learning:\n\n    residual process X_t\n        -> online HMM / online EM\n        -> learning gate w_t\n        -> less learning from degenerate or locally misspecified observations\n\nThe strongest connection is their trading-time idea: they already modify signals based on volume, meaning not all observations are treated equally. The thesis generalizes this into a broader learning gate:\n\n    w_t = learning relevance of observation t\n\nwhere w_t is not only uncertainty, but a heuristic or learned rule for when the model should update strongly, weakly, or not at all.",
+      "rationale": "A confirmed hypothesis is the main support for the top-level claim.",
       "documents": []
     },
     {
       "id": "E007",
-      "from": "C009",
-      "to": "C008",
-      "type": "motivates",
-      "rationale": "C008 proposes using AL residuals for gated learning, but this only works if static factor loadings produce valid OU residuals. If time-varying loadings contaminate the residuals, the gating signal is built on a misspecified base.",
+      "from": "N008",
+      "to": "N005",
+      "type": "depends_on",
+      "rationale": "The decision to ship leans directly on the benchmark evidence.",
       "documents": []
     },
     {
       "id": "E008",
-      "from": "C010",
-      "to": "C008",
-      "type": "motivates",
-      "rationale": "The claim in C008 requires specifying which factor model sits upstream. The choice of static vs. adaptive vs. regime-specific loadings directly determines whether the OU adequacy criterion and the gating signal are trustworthy.",
-      "documents": []
-    },
-    {
-      "id": "E010",
-      "from": "C012",
-      "to": "C008",
-      "type": "motivates",
-      "rationale": "If factor loadings drift within an HMM regime, the OU residual used for gated learning accumulates loading-estimation error throughout the regime. This directly limits how long a gating window can remain valid before the base residual becomes unreliable.",
-      "documents": []
-    },
-    {
-      "id": "E011",
-      "from": "C013",
-      "to": "C008",
-      "type": "motivates",
-      "rationale": "factor/PCA modelling remains open",
+      "from": "N008",
+      "to": "N006",
+      "type": "depends_on",
+      "rationale": "The decision explicitly carves out the failure mode rather than ignoring it.",
       "documents": []
     }
   ],
   "pos": {
-    "C001": {
-      "x": 500,
-      "y": 102
-    },
-    "C002": {
-      "x": 599,
-      "y": 129
-    },
-    "C003": {
-      "x": 671,
-      "y": 201
-    },
-    "C004": {
-      "x": 1042,
-      "y": 288
-    },
-    "C008": {
-      "x": 401,
-      "y": 471
-    },
-    "C009": {
-      "x": 329,
-      "y": 399
-    },
-    "C010": {
-      "x": 302,
-      "y": 300
-    },
-    "C012": {
-      "x": 329,
-      "y": 201
-    },
-    "C013": {
-      "x": 401,
-      "y": 129
-    },
-    "C005": {
-      "x": 867,
-      "y": 494
-    },
-    "C014": {
-      "x": 678,
-      "y": 580
-    }
+    "N001": { "x": 520, "y": 120 },
+    "N002": { "x": 520, "y": 260 },
+    "N003": { "x": 300, "y": 260 },
+    "N004": { "x": 740, "y": 260 },
+    "N005": { "x": 740, "y": 400 },
+    "N006": { "x": 300, "y": 400 },
+    "N007": { "x": 520, "y": 40 },
+    "N008": { "x": 520, "y": 520 }
   }
 }
