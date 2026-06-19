@@ -2,6 +2,29 @@
 
 A minimal, single-file GUI for editing structured reasoning graphs.
 
+## How it works
+
+The whole app is one HTML file (`index.html`): markup, styles, and JS in a single page, no
+build step and no dependencies. It holds an in-memory graph `G = { nodes, edges }` and a
+`pos` map of canvas coordinates, and re-renders the node/edge panels and SVG canvas from
+that state on every change.
+
+A project is meant to hold several independent reasoning threads at once, so the graph
+itself is the unit that's swapped, not the page: each thread is a JSON file under `graphs/`,
+and a header dropdown switches `G` between them (see [Multiple graphs](#multiple-graphs-tabs)).
+
+Each node/edge can point at local files in `references/` and `summaries/`, tagged with a
+`level` (`admin` / `summary` / `full`) that tells an AI agent walking the graph whether, and
+which, attached document it actually needs to read for that node (see
+[Documents](#documents)). The same token-economy idea applies at the structural level: once
+a chain of nodes has settled, it can be folded into one summary node so an agent revisiting
+the graph reads one node instead of the whole chain (see
+[Folding a chain into one node](#folding-a-chain-into-one-node)).
+
+`serve.py` is optional scaffolding around this: a static file server plus two endpoints
+(`/graphs`, `/save?graph=NAME`) so the browser can list and persist graph files to disk.
+Without it (`file://`), the app still works, just backed by localStorage instead of files.
+
 ## How to run
 
 Run `python serve.py` from this folder and open `http://localhost:8080`. This is required for
