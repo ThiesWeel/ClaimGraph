@@ -6,21 +6,24 @@
       "title": "Regime purity is boosts OU predictive performance.",
       "type": "claim",
       "body": "If degenerate observations contaminate the OU regime, emission parameters become biased, reducing forecast quality for non degenerate forecasts. Splitting the non degenerate observations and the degenerate observations, allows for better forecast quality.",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C002",
       "title": "What does degeneracy in spread series look like?",
       "type": "question",
       "body": "If we want a theoretical proof of concept of with decontaminated OU model(s), we need to first probe somehow what degeneracy looks like: how does it occur? How long does it persist? what kind of models do work in these episodes? and with what parameters, RW + student-t?",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C003",
       "title": "Level ambiguity in regime-switching mdoelling approach",
       "type": "question",
       "body": "Regime-specific means confound level heterogeneity with dynamic heterogeneity. They do not only capture how the spread behaves, such as fast reversion, slow reversion, or trending. They also capture the absolute level where the spread happened to sit during estimation.\n\nThis makes regime labels unstable. A regime identified as \"fast mean reversion\" may really mean \"fast mean reversion around the historical level seen in training.\" If the spread later shifts to a new level, the model still pulls it toward the old regime level, which may no longer be relevant.\n\nSo the regimes partly describe where the spread was, not just how it behaved. This makes the model locally valid but weak out of samp",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C004",
@@ -33,63 +36,72 @@
           "reference": "references/research_proposal.md",
           "summary": ""
         }
-      ]
+      ],
+      "status": "open"
     },
     {
       "id": "C005",
       "title": "How do we model the hedge ratio relation?",
       "type": "question",
       "body": "Moving parameters? or not? when do we deem a cointegration relationship to be not valid enough any more?",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C006",
       "title": "u_t ~ I(0), when stationarity 'enough'?",
       "type": "question",
       "body": "",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C007",
       "title": "Symbolic regression as destillation method?",
       "type": "question",
       "body": "this could be a good distil method",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C008",
       "title": "Avellanda2008 Residual modelling, good candidate for gated learning",
       "type": "evidence",
       "body": "",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C009",
       "title": "Do static factor loadings contaminate the OU residuals?",
       "type": "question",
       "body": "In the Avellaneda-Lee architecture, factor loadings beta_i are estimated statically (OLS on a fixed window). If the true loadings are time-varying (beta_{i,t}), the observable residual r_{i,t} - beta_i' F_t contains the contamination term (beta_{i,t} - beta_i)' F_t, which is driven by common factors and is not idiosyncratic. Does this contamination bias the OU parameter estimates (kappa, m, sigma)? Can it create spurious apparent mean-reversion or destroy true mean-reversion? This determines how sensitive the downstream HMM is to the upstream factor model's static assumption.",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C010",
       "title": "Which upstream factor model is compatible with downstream OU/HMM modelling?",
       "type": "question",
       "body": "Options range from static PCA (Avellaneda-Lee), rolling-window PCA, regime-specific PCA, Kalman-filter betas (Adrian-Franzoni), to characteristic-instrumented betas (IPCA). Each makes different assumptions about how loadings evolve. The choice affects: \n(1) whether residuals (within an HMM regime) are validly OU; \n(2) whether the OU adequacy diagnostic (kappa, valid fraction) reflects genuine idiosyncratic dynamics or loading-estimation artifacts due to misspecification;",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C012",
       "title": "Are factor loadings approximately constant within an HMM regime?",
       "type": "question",
       "body": "The gated learning idea in C008 assumes that within an OU regime, the factor loadings are stable enough that the PCA-defactored residual is a valid OU process. But if factor loadings drift continuously within a regime (as the DCB and Del Negro-Otrok literature shows they do), the residuals accumulate systematic factor-loading error over the regime duration. This error grows with regime length and common factor volatility. The question is: is the within-regime loading drift small enough to be ignored relative to the idiosyncratic OU signal, or does it materially degrade OU parameter estimates and the gating signal?",
-      "documents": []
+      "documents": [],
+      "status": "open"
     },
     {
       "id": "C013",
       "title": "Moving Betas and factor, how to manage?",
       "type": "question",
       "body": "If we want to trade cumlative residuals, or potnetially EWMA of the residuals, then we can not have bias that accumelates. What are the most advaced methods for this? what makes sense?",
-      "documents": []
+      "documents": [],
+      "status": "open"
     }
   ],
   "edges": [

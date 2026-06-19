@@ -134,6 +134,7 @@
   </span>
   <span class="sp"></span>
   <button class="bs" onclick="clearAll()">Clear</button>
+  <button class="bs" onclick="runValidation(false)">Validate</button>
   <button class="bs" onclick="trigImport()">Import JSON</button>
   <button class="bp" onclick="exportJSON()">Export JSON</button>
 </div>
@@ -232,32 +233,38 @@ const DOC_LEVELS = {
   full:    'full (read references/ file when following this node)'
 };
 
+// Node status: what still needs attention vs. what's settled.
+const STATUS = ['open','active','settled','rejected','needs_test'];
+const SCLR = {
+  open:'#94a3b8', active:'#3b82f6', settled:'#22c55e', rejected:'#ef4444', needs_test:'#f59e0b'
+};
+
 const DEFAULT = {
   nodes: [
-    { id:"C001", title:"Regime purity boosts OU predictive performance.", type:"claim",
+    { id:"C001", title:"Regime purity boosts OU predictive performance.", type:"claim", status:"open",
       body:"If degenerate observations contaminate the OU regime, emission parameters become biased, reducing forecast quality for non degenerate forecasts. Splitting the non degenerate observations and the degenerate observations, allows for better forecast quality.", documents:[] },
-    { id:"C002", title:"What does degeneracy in spread series look like?", type:"question",
+    { id:"C002", title:"What does degeneracy in spread series look like?", type:"question", status:"open",
       body:"If we want a theoretical proof of concept of with decontaminated OU model(s), we need to first probe somehow what degeneracy looks like: how does it occur? How long does it persist? what kind of models do work in these episodes? and with what parameters, RW + student-t?", documents:[] },
-    { id:"C003", title:"Level ambiguity in regime-switching modelling approach", type:"question",
+    { id:"C003", title:"Level ambiguity in regime-switching modelling approach", type:"question", status:"open",
       body:"Regime-specific means confound level heterogeneity with dynamic heterogeneity. They do not only capture how the spread behaves, such as fast reversion, slow reversion, or trending. They also capture the absolute level where the spread happened to sit during estimation.", documents:[] },
-    { id:"C004", title:"MasterThesis goal", type:"claim",
+    { id:"C004", title:"MasterThesis goal", type:"claim", status:"open",
       body:"The core of the research: we want to model spread of cointegration relationships in a way that uses ML in an interpretable manner to boost already existing methods to be better.",
       documents:[{ level:"full", reference:"references/research_proposal.md", summary:"" }] },
-    { id:"C005", title:"How do we model the hedge ratio relation?", type:"question",
+    { id:"C005", title:"How do we model the hedge ratio relation?", type:"question", status:"open",
       body:"Moving parameters? or not? when do we deem a cointegration relationship to be not valid enough any more?", documents:[] },
-    { id:"C006", title:"u_t ~ I(0), when stationarity 'enough'?", type:"question",
+    { id:"C006", title:"u_t ~ I(0), when stationarity 'enough'?", type:"question", status:"open",
       body:"", documents:[] },
-    { id:"C007", title:"Symbolic regression as distillation method?", type:"question",
+    { id:"C007", title:"Symbolic regression as distillation method?", type:"question", status:"open",
       body:"this could be a good distil method", documents:[] },
-    { id:"C008", title:"Avellanda2008 Residual modelling, good candidate for gated learning", type:"evidence",
+    { id:"C008", title:"Avellanda2008 Residual modelling, good candidate for gated learning", type:"evidence", status:"open",
       body:"", documents:[] },
-    { id:"C009", title:"Do static factor loadings contaminate the OU residuals?", type:"question",
+    { id:"C009", title:"Do static factor loadings contaminate the OU residuals?", type:"question", status:"open",
       body:"In the Avellaneda-Lee architecture, factor loadings beta_i are estimated statically (OLS on a fixed window). If the true loadings are time-varying (beta_{i,t}), the observable residual r_{i,t} - beta_i' F_t contains the contamination term (beta_{i,t} - beta_i)' F_t, which is driven by common factors and is not idiosyncratic. Does this contamination bias the OU parameter estimates (kappa, m, sigma)? Can it create spurious apparent mean-reversion or destroy true mean-reversion?", documents:[] },
-    { id:"C010", title:"Which upstream factor model is compatible with downstream OU/HMM modelling?", type:"question",
+    { id:"C010", title:"Which upstream factor model is compatible with downstream OU/HMM modelling?", type:"question", status:"open",
       body:"Options range from static PCA (Avellaneda-Lee), rolling-window PCA, regime-specific PCA, Kalman-filter betas (Adrian-Franzoni), to characteristic-instrumented betas (IPCA). Each makes different assumptions about how loadings evolve. The choice affects whether residuals within an HMM regime are validly OU and whether the IO state fires on genuine cointegration breakdown or on factor model misspecification.", documents:[] },
-    { id:"C012", title:"Are factor loadings approximately constant within an HMM regime?", type:"question",
+    { id:"C012", title:"Are factor loadings approximately constant within an HMM regime?", type:"question", status:"open",
       body:"If factor loadings drift continuously within a regime (as DCB and Del Negro-Otrok show they do), the OU residuals accumulate systematic factor-loading error over the regime duration. Is within-regime loading drift small enough to ignore relative to the idiosyncratic OU signal?", documents:[] },
-    { id:"C013", title:"Does PCA defactoring preserve the cointegration relationship between the two legs?", type:"question",
+    { id:"C013", title:"Does PCA defactoring preserve the cointegration relationship between the two legs?", type:"question", status:"open",
       body:"If (r_a, r_b) are cointegrated, are (eps_a, eps_b) also cointegrated where eps_i = r_i - beta_i' F? If defactoring destroys the cointegrating relationship, the spread from the residuals is not a valid cointegration spread and the OU assumption may not hold.", documents:[] }
   ],
   edges: [
@@ -386,6 +393,9 @@ async function loadGraph(name) {
       save();
     }
   }
+
+  const warnings = validateGraph(G);
+  if (warnings.length) console.warn(`ClaimGraph: ${warnings.length} issue(s) in "${name}" — click Validate to see them.`, warnings);
 }
 
 async function switchGraph(name) {
@@ -467,6 +477,7 @@ function renderPanels() {
       <div class="it">${esc(n.title)}</div>
       <div class="im">
         <span class="b" style="background:${NCLR[n.type]||'#888'}">${n.type}</span>
+        <span title="status: ${n.status||'open'}" style="display:inline-block;width:7px;height:7px;border-radius:99px;background:${SCLR[n.status]||SCLR.open};margin-left:4px;vertical-align:middle"></span>
         &nbsp;${n.id}
         ${n.documents&&n.documents.length ? ` · ${n.documents.length} doc` : ''}
       </div>
@@ -534,6 +545,7 @@ function renderSVG() {
             font-size="10" font-family="inherit"
             style="pointer-events:none">${esc(lbl)}</text>
       ${lone?`<circle cx="${NW-7}" cy="7" r="4" fill="#fbbf24" title="isolated"/>`:``}
+      <circle cx="7" cy="7" r="3.5" fill="${SCLR[n.status]||SCLR.open}" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>
       ${n.collapsed?`<text x="6" y="${NH-5}" fill="rgba(255,255,255,0.9)" font-size="9" font-family="inherit" style="pointer-events:none">⊕ ${n.children.nodes.length}</text>`:``}
     </g>`;
   }).join('');
@@ -648,6 +660,7 @@ function editNode(id) {
       <div style="flex:2;min-width:180px">
         <div class="fr"><label>Title</label><input id="e-ti" value="${escA(n.title)}"/></div>
         <div class="fr"><label>Type</label><select id="e-ty">${typeOpts(NODE_TYPES,n.type)}</select></div>
+        <div class="fr"><label>Status</label><select id="e-st">${typeOpts(STATUS,n.status||'open')}</select></div>
         <div class="fr"><label>Body</label><textarea id="e-bo">${esc(n.body||'')}</textarea></div>
       </div>
       <div style="flex:1;min-width:200px">
@@ -692,6 +705,7 @@ function saveNode(id) {
   pushUndo();
   n.title     = document.getElementById('e-ti').value.trim();
   n.type      = document.getElementById('e-ty').value;
+  n.status    = document.getElementById('e-st').value;
   n.body      = document.getElementById('e-bo').value.trim();
   save(); render(); editNode(id);
 }
@@ -715,7 +729,7 @@ function addNode() {
   if (!t) { alert('Title required'); return; }
   pushUndo();
   const id = nextId('C', G.nodes);
-  G.nodes.push({ id, title:t, type:document.getElementById('nn-ty').value, body:'', documents:[] });
+  G.nodes.push({ id, title:t, type:document.getElementById('nn-ty').value, status:'open', body:'', documents:[] });
   const cv = document.getElementById('cv');
   pos[id] = {
     x: (cv.clientWidth||820)/2  + (Math.random()-.5)*300,
@@ -818,7 +832,7 @@ function foldSelected() {
   });
 
   G.nodes.push({
-    id: newId, title: `Folded chain (${ids.length} nodes)`, type: 'claim',
+    id: newId, title: `Folded chain (${ids.length} nodes)`, type: 'claim', status: 'settled',
     body: '', documents: [],
     collapsed: true,
     children: { nodes: childNodes, edges: childEdges, boundaryEdges, pos: childPos }
@@ -854,6 +868,43 @@ function clearAll() {
   G={nodes:[],edges:[]}; pos={}; sel=null; multiSel.clear(); closeEdit(); save(); render();
 }
 
+// ── Validation ────────────────────────────────────────────────────────────────
+// Non-blocking: returns a list of warning strings rather than rejecting the graph.
+// Catches the things that make a graph ambiguous or unreadable for an agent traversing it.
+
+function validateGraph(g) {
+  const warnings = [];
+  const nodeIds  = new Set(g.nodes.map(n => n.id));
+
+  g.nodes.forEach(n => {
+    if (!NODE_TYPES.includes(n.type)) warnings.push(`Node ${n.id}: unknown type "${n.type}"`);
+    if (n.status && !STATUS.includes(n.status)) warnings.push(`Node ${n.id}: unknown status "${n.status}"`);
+    (n.documents||[]).forEach((d,i) => {
+      if (d.level === 'summary' && !d.summary) warnings.push(`Node ${n.id}: document #${i+1} is level "summary" but has no summary path`);
+      if (d.level === 'full' && !d.reference) warnings.push(`Node ${n.id}: document #${i+1} is level "full" but has no reference path`);
+    });
+  });
+
+  g.edges.forEach(e => {
+    if (!EDGE_TYPES.includes(e.type)) warnings.push(`Edge ${e.id}: unknown type "${e.type}"`);
+    if (!nodeIds.has(e.from)) warnings.push(`Edge ${e.id}: "from" node ${e.from} does not exist`);
+    if (!nodeIds.has(e.to))   warnings.push(`Edge ${e.id}: "to" node ${e.to} does not exist`);
+    (e.documents||[]).forEach((d,i) => {
+      if (d.level === 'summary' && !d.summary) warnings.push(`Edge ${e.id}: document #${i+1} is level "summary" but has no summary path`);
+      if (d.level === 'full' && !d.reference) warnings.push(`Edge ${e.id}: document #${i+1} is level "full" but has no reference path`);
+    });
+  });
+
+  return warnings;
+}
+
+function runValidation(silentIfClean) {
+  const warnings = validateGraph(G);
+  if (warnings.length) alert(`${warnings.length} issue(s) found:\n\n` + warnings.join('\n'));
+  else if (!silentIfClean) alert('No issues found.');
+  return warnings;
+}
+
 // ── Import / Export ───────────────────────────────────────────────────────────
 
 function exportJSON() {
@@ -875,6 +926,7 @@ function onImport(ev) {
       unpackGraph(d);
       if (!d.pos) initPos(); else ensurePos();
       sel=null; multiSel.clear(); closeEdit(); save(); render();
+      runValidation(true);
     } catch(err) { alert('Import error: ' + err.message); }
   };
   r.readAsText(f);

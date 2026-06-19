@@ -48,6 +48,8 @@ in that mode graphs are stored in browser localStorage instead of on disk.
 - State is auto-saved to browser localStorage
 - Multiple named graphs ("tabs") per project, switchable from the header dropdown
 - Long, settled chains of nodes can be folded into a single summary node, and expanded back
+- Each node carries a `status` (open / active / settled / rejected / needs_test), shown as a coloured dot
+- **Validate** button checks the graph for unknown types, dangling edges, and document invariant violations
 
 ## Data model
 
@@ -59,6 +61,7 @@ in that mode graphs are stored in browser localStorage instead of on disk.
       "id": "C001",
       "title": "Short claim title",
       "type": "claim",
+      "status": "open",
       "body": "Full explanation.",
       "documents": [
         { "level": "full", "reference": "references/paper.pdf", "summary": "summaries/paper.md" }
@@ -126,6 +129,20 @@ by hand; use the Fold/Expand UI.
 `derived_from` and `implements` are deliberately left out until notebook/code integration
 becomes part of the workflow.
 
+### Node status
+
+| Status | Meaning |
+|---|---|
+| `open` | Default. Not yet worked, no judgement made. |
+| `active` | Currently being investigated or argued. |
+| `settled` | Resolved enough to build on without re-deriving it. |
+| `rejected` | Considered and discarded. |
+| `needs_test` | Believed plausible, but blocked on a `test` node to confirm. |
+
+This is the field most useful for triaging a graph at a glance, by hand or by an agent —
+"what's still open" is usually a more actionable question than a numeric confidence score.
+Edges don't have a `status` yet; add it if a concrete need for it shows up.
+
 ### Documents
 
 Both nodes and edges can carry a list of `documents`. Each document entry has a `level` and
@@ -149,6 +166,20 @@ an agent is actively reasoning over that node. The invariant a document entry sh
 
 This isn't currently enforced by the app — entries that violate it just won't have anything
 useful for an agent to read at that level.
+
+## Validation
+
+Click **Validate** in the header (or import a JSON file, which runs it automatically) to check
+the current graph for:
+
+- unknown node/edge `type`
+- unknown node `status`
+- edges whose `from`/`to` point at a node id that doesn't exist
+- documents whose `level` doesn't match the invariant above (e.g. `level: "full"` with no `reference`)
+
+This is non-blocking by design: a graph with issues still loads and saves fine, Validate just
+surfaces them so you can decide whether to fix them. Every graph is also silently checked on
+load, logging a console warning if it has issues — open devtools if something seems off.
 
 ## Folders
 
@@ -185,6 +216,58 @@ app decides on its own:
 
 A folded node's `documents` and `body` behave exactly like any other node — set its document
 `level` the same way you would for an unfolded claim.
+
+## AI suggestion protocol (design intent, not implemented)
+
+ClaimGraph has no built-in agent today. Everything in this section is a sketch of how an
+external agent *should* propose changes to a graph, written down now so future integration
+work has a shape to converge on rather than reinventing it ad hoc.
+
+The idea: an agent reads a graph (respecting `documents[].level` as described above), then
+proposes a small batch of mutations as data rather than editing `graphs/*.json` directly:
+
+```json
+{
+  "graph": "main",
+  "suggestions": [
+    {
+      "action": "add_node",
+      "node": { "title": "...", "type": "hypothesis", "status": "open", "body": "..." },
+      "rationale": "Why this node should exist."
+    },
+    {
+      "action": "add_edge",
+      "edge": { "from": "C001", "to": "C004", "type": "weakens", "rationale": "..." },
+      "rationale": "Why this edge should exist."
+    },
+    {
+      "action": "update_node",
+      "id": "C007",
+      "patch": { "status": "settled" },
+      "rationale": "Why this change is warranted."
+    },
+    {
+      "action": "fold",
+      "ids": ["C010", "C011", "C012"],
+      "summary": "Proposed body for the resulting folded node.",
+      "rationale": "Why this chain is settled enough to fold."
+    }
+  ]
+}
+```
+
+Two properties this is meant to preserve:
+
+- **Every suggestion carries a `rationale`**, the same as edges do — a suggestion without one
+  is exactly as unhelpful as a `motivates` edge without one.
+- **Suggestions are proposals, not direct writes.** A human (or a review step) applies them
+  through the normal UI/API rather than the agent calling `/save` itself; this is what keeps
+  `serve.py`'s no-auth, local-only design (see [Files](#files)) acceptable.
+
+None of `action`, `suggestions`, or an apply-endpoint exist in the code yet. The next concrete
+step, if/when this gets built, is a "Suggest moves for selected node" action in the UI that
+asks an agent to produce one or more of the suggestion shapes above for the currently selected
+node.
 
 ## Files
 
