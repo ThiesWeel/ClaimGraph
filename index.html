@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ClaimGraph</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: #f0f2f5;
+      color: #1a1a1a;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header */
+    #header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 14px;
+      background: #1c1c1e;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    #header h1 { font-size: 14px; font-weight: 700; letter-spacing: 0.2px; }
+    #header .sp { flex: 1; }
+
+    /* Buttons */
+    button {
+      cursor: pointer; border: none; border-radius: 5px;
+      padding: 5px 11px; font-size: 12px; font-family: inherit;
+    }
+    button:hover { opacity: 0.82; }
+    .bp { background: #3b82f6; color: #fff; }
+    .bs { background: #555;    color: #fff; }
+    .bd { background: #ef4444; color: #fff; }
+    .sm { padding: 3px 8px; font-size: 11px; }
+
+    /* Three-column layout */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Side panels */
+    .panel {
+      width: 228px; flex-shrink: 0;
+      display: flex; flex-direction: column;
+      background: #fff; overflow: hidden;
+    }
+    #np { border-right: 1px solid #ddd; }
+    #ep { border-left:  1px solid #ddd; }
+
+    .ph {
+      padding: 7px 12px;
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      color: #999; background: #fafafa;
+      border-bottom: 1px solid #eee;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .pl { flex: 1; overflow-y: auto; }
+    .pf { padding: 9px; border-top: 1px solid #eee; background: #fafafa; }
+
+    /* List items */
+    .item {
+      padding: 7px 10px; border-bottom: 1px solid #f3f3f3;
+      cursor: pointer; transition: background 0.08s;
+    }
+    .item:hover { background: #f7f7f7; }
+    .item.on { background: #eff6ff; border-left: 3px solid #3b82f6; padding-left: 7px; }
+    .it { font-size: 12px; font-weight: 500; line-height: 1.3; }
+    .im { margin-top: 3px; font-size: 11px; color: #aaa; }
+    .warn { color: #ef4444; font-size: 10px; }
+
+    /* Badges */
+    .b {
+      display: inline-block; padding: 1px 6px; border-radius: 99px;
+      font-size: 10px; font-weight: 700; color: #fff; vertical-align: middle;
+    }
+    .tc  { background: #3b82f6; }
+    .te  { background: #22c55e; }
+    .ta  { background: #f97316; }
+    .tA  { background: #a855f7; }
+    .tq  { background: #ec4899; }
+    .ts  { background: #22c55e; }
+    .td  { background: #3b82f6; }
+    .tk  { background: #ef4444; }
+    .tco { background: #b91c1c; }
+    .tr  { background: #8b5cf6; }
+
+    /* Canvas */
+    #cw {
+      flex: 1; position: relative; overflow: hidden;
+      background: #f8faff;
+      background-image: radial-gradient(#dde3f0 1px, transparent 1px);
+      background-size: 22px 22px;
+    }
+    #cv { width: 100%; height: 100%; display: block; }
+
+    /* Edit panel */
+    #editp {
+      background: #fff; border-top: 2px solid #3b82f6;
+      padding: 11px 16px 9px; flex-shrink: 0;
+      display: none; max-height: 220px; overflow-y: auto;
+    }
+    #editp.open { display: block; }
+    #editp h3 {
+      font-size: 12px; font-weight: 700; margin-bottom: 9px;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    /* Form rows */
+    .fr { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 5px; }
+    .fr label { font-size: 11px; color: #777; width: 72px; flex-shrink: 0; padding-top: 5px; }
+    .fr input, .fr select, .fr textarea {
+      flex: 1; border: 1px solid #ddd; border-radius: 4px;
+      padding: 4px 7px; font-size: 12px; font-family: inherit; background: #fff;
+    }
+    .fr textarea { resize: vertical; min-height: 46px; }
+    .fr input:focus, .fr select:focus, .fr textarea:focus {
+      outline: none; border-color: #3b82f6;
+    }
+    .fa { display: flex; gap: 6px; margin-top: 7px; }
+
+    /* Panel form: vertical layout */
+    .pf .fr { flex-direction: column; gap: 2px; }
+    .pf .fr label { width: auto; padding-top: 0; }
+    .pf .fr input, .pf .fr select { width: 100%; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>⬡ ClaimGraph</h1>
+  <span class="sp"></span>
+  <button class="bs" onclick="clearAll()">Clear</button>
+  <button class="bs" onclick="trigImport()">Import JSON</button>
+  <button class="bp" onclick="exportJSON()">Export JSON</button>
+</div>
+
+<div id="main">
+
+  <!-- Nodes panel -->
+  <div class="panel" id="np">
+    <div class="ph"><span>Nodes</span><span id="nc" style="color:#ccc">0</span></div>
+    <div class="pl" id="nl"></div>
+    <div class="pf">
+      <div class="fr"><label>Title</label><input id="nn-t" placeholder="New claim..."/></div>
+      <div class="fr"><label>Type</label>
+        <select id="nn-ty">
+          <option value="claim">claim</option>
+          <option value="evidence">evidence</option>
+          <option value="argument">argument</option>
+          <option value="assumption">assumption</option>
+          <option value="question">question</option>
+        </select>
+      </div>
+      <button class="bp" style="width:100%;margin-top:5px" onclick="addNode()">+ Add Node</button>
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div id="cw">
+    <svg id="cv" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah-supports"    viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#22c55e"/></marker>
+        <marker id="ah-depends_on"  viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3b82f6"/></marker>
+        <marker id="ah-attacks"     viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ef4444"/></marker>
+        <marker id="ah-contradicts" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker>
+        <marker id="ah-refines"     viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8b5cf6"/></marker>
+        <marker id="ah-default"     viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#888"/></marker>
+      </defs>
+      <g id="ge"></g>
+      <g id="gn"></g>
+    </svg>
+  </div>
+
+  <!-- Edges panel -->
+  <div class="panel" id="ep">
+    <div class="ph"><span>Edges</span><span id="ec" style="color:#ccc">0</span></div>
+    <div class="pl" id="el"></div>
+    <div class="pf">
+      <div class="fr"><label>From</label><select id="ne-f"></select></div>
+      <div class="fr"><label>To</label><select id="ne-t"></select></div>
+      <div class="fr"><label>Type</label>
+        <select id="ne-ty">
+          <option value="supports">supports</option>
+          <option value="depends_on">depends_on</option>
+          <option value="attacks">attacks</option>
+          <option value="contradicts">contradicts</option>
+          <option value="refines">refines</option>
+        </select>
+      </div>
+      <div class="fr"><label>Rationale</label><input id="ne-r" placeholder="Why this edge..."/></div>
+      <button class="bp" style="width:100%;margin-top:5px" onclick="addEdge()">+ Add Edge</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Edit panel -->
+<div id="editp">
+  <div id="editi"></div>
+</div>
+
+<input type="file" id="fi" accept=".json" style="display:none" onchange="onImport(event)">
+
+<script>
+'use strict';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const NODE_TYPES = ['claim','evidence','argument','assumption','question'];
+const EDGE_TYPES = ['supports','depends_on','attacks','contradicts','refines'];
+
+const NCLR = {
+  claim:'#3b82f6', evidence:'#22c55e', argument:'#f97316',
+  assumption:'#a855f7', question:'#ec4899'
+};
+const ECLR = {
+  supports:'#22c55e', depends_on:'#3b82f6', attacks:'#ef4444',
+  contradicts:'#b91c1c', refines:'#8b5cf6'
+};
+// CSS badge class per type (node: tc/te/ta/tA/tq, edge: ts/td/tk/tco/tr)
+const NBDG = { claim:'tc', evidence:'te', argument:'ta', assumption:'tA', question:'tq' };
+const EBDG = { supports:'ts', depends_on:'td', attacks:'tk', contradicts:'tco', refines:'tr' };
+
+const NW = 144, NH = 42; // node box dimensions
+
+const DEFAULT = {
+  nodes: [
+    { id:"C001", title:"Regime purity boosts OU predictive performance.", type:"claim",
+      body:"If degenerate observations contaminate the OU regime, emission parameters become biased, reducing forecast quality for non degenerate forecasts. Splitting the non degenerate observations and the degenerate observations, allows for better forecast quality.", documents:[] },
+    { id:"C002", title:"What does degeneracy in spread series look like?", type:"question",
+      body:"If we want a theoretical proof of concept of with decontaminated OU model(s), we need to first probe somehow what degeneracy looks like: how does it occur? How long does it persist? what kind of models do work in these episodes? and with what parameters, RW + student-t?", documents:[] },
+    { id:"C003", title:"Level ambiguity in regime-switching modelling approach", type:"question",
+      body:"Regime-specific means confound level heterogeneity with dynamic heterogeneity. They do not only capture how the spread behaves, such as fast reversion, slow reversion, or trending. They also capture the absolute level where the spread happened to sit during estimation.", documents:[] },
+    { id:"C004", title:"MasterThesis goal", type:"claim",
+      body:"The core of the research: we want to model spread of cointegration relationships in a way that uses ML in an interpretable manner to boost already existing methods to be better.", documents:["./01_research_direction/research_proposal.md"] },
+    { id:"C005", title:"How do we model the hedge ratio relation?", type:"question",
+      body:"Moving parameters? or not? when do we deem a cointegration relationship to be not valid enough any more?", documents:[] },
+    { id:"C006", title:"u_t ~ I(0), when stationarity 'enough'?", type:"question",
+      body:"", documents:[] },
+    { id:"C007", title:"Symbolic regression as distillation method?", type:"question",
+      body:"this could be a good distil method", documents:[] },
+    { id:"C008", title:"Avellanda2008 Residual modelling, good candidate for gated learning", type:"evidence",
+      body:"", documents:[] },
+    { id:"C009", title:"Do static factor loadings contaminate the OU residuals?", type:"question",
+      body:"In the Avellaneda-Lee architecture, factor loadings beta_i are estimated statically (OLS on a fixed window). If the true loadings are time-varying (beta_{i,t}), the observable residual r_{i,t} - beta_i' F_t contains the contamination term (beta_{i,t} - beta_i)' F_t, which is driven by common factors and is not idiosyncratic. Does this contamination bias the OU parameter estimates (kappa, m, sigma)? Can it create spurious apparent mean-reversion or destroy true mean-reversion?", documents:[] },
+    { id:"C010", title:"Which upstream factor model is compatible with downstream OU/HMM modelling?", type:"question",
+      body:"Options range from static PCA (Avellaneda-Lee), rolling-window PCA, regime-specific PCA, Kalman-filter betas (Adrian-Franzoni), to characteristic-instrumented betas (IPCA). Each makes different assumptions about how loadings evolve. The choice affects whether residuals within an HMM regime are validly OU and whether the IO state fires on genuine cointegration breakdown or on factor model misspecification.", documents:[] },
+    { id:"C012", title:"Are factor loadings approximately constant within an HMM regime?", type:"question",
+      body:"If factor loadings drift continuously within a regime (as DCB and Del Negro-Otrok show they do), the OU residuals accumulate systematic factor-loading error over the regime duration. Is within-regime loading drift small enough to ignore relative to the idiosyncratic OU signal?", documents:[] },
+    { id:"C013", title:"Does PCA defactoring preserve the cointegration relationship between the two legs?", type:"question",
+      body:"If (r_a, r_b) are cointegrated, are (eps_a, eps_b) also cointegrated where eps_i = r_i - beta_i' F? If defactoring destroys the cointegrating relationship, the spread from the residuals is not a valid cointegration spread and the OU assumption may not hold.", documents:[] }
+  ],
+  edges: [
+    { id:"E001", from:"C002", to:"C001", type:"depends_on",
+      rationale:"To come up with some theoretical emulation of the process, we first need to know what the problem looks like in practice", documents:[] },
+    { id:"E002", from:"C003", to:"C002", type:"depends_on",
+      rationale:"What the problem looks like depends in first instance on how we define regime switching models in this setting.", documents:[] },
+    { id:"E003", from:"C005", to:"C004", type:"refines",
+      rationale:"Open design question", documents:[] },
+    { id:"E004", from:"C006", to:"C004", type:"refines",
+      rationale:"Stationarity according to cointegration test could be insufficient for the pipeline idea.", documents:[] },
+    { id:"E005", from:"C007", to:"C004", type:"refines",
+      rationale:"suggestion for ML -> interpretable", documents:[] },
+    { id:"E006", from:"C004", to:"C008", type:"supports",
+      rationale:"Avellaneda-Lee separates stock returns into systematic + residual component. The residual is treated as OU-like. The thesis adds gated online learning on top of this base.", documents:[] },
+    { id:"E007", from:"C009", to:"C008", type:"refines",
+      rationale:"C008 proposes using AL residuals for gated learning, but this only works if static factor loadings produce valid OU residuals. If time-varying loadings contaminate the residuals, the gating signal is built on a misspecified base.", documents:[] },
+    { id:"E008", from:"C010", to:"C008", type:"refines",
+      rationale:"The claim in C008 requires specifying which factor model sits upstream. The choice of static vs. adaptive vs. regime-specific loadings directly determines whether the OU adequacy criterion and the gating signal are trustworthy.", documents:[] },
+    { id:"E010", from:"C012", to:"C008", type:"refines",
+      rationale:"If factor loadings drift within an HMM regime, the OU residual used for gated learning accumulates loading-estimation error throughout the regime.", documents:[] },
+    { id:"E011", from:"C013", to:"C008", type:"depends_on",
+      rationale:"The entire C008 architecture assumes that PCA-defactored residuals are cointegrated and OU-like. If defactoring destroys the cointegration relationship, the gated learning framework has no foundation.", documents:[] }
+  ]
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let G         = { nodes:[], edges:[] };
+let pos       = {};   // { nodeId: {x, y} }
+let sel       = null; // { type:'node'|'edge', id }
+let dragged   = false;
+let clipboard = null; // copied node
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+function save() {
+  localStorage.setItem('cg_g', JSON.stringify(G));
+  localStorage.setItem('cg_p', JSON.stringify(pos));
+  saveToDisk();
+}
+
+let _diskTimer = null;
+function saveToDisk() {
+  clearTimeout(_diskTimer);
+  _diskTimer = setTimeout(() => {
+    if (window.location.protocol === 'file:') return;
+    fetch('/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(G, null, 2)
+    }).catch(() => {});
+  }, 400);
+}
+
+function loadStorage() {
+  const g = localStorage.getItem('cg_g');
+  if (!g) return false;
+  G   = JSON.parse(g);
+  pos = JSON.parse(localStorage.getItem('cg_p') || '{}');
+  ensurePos();
+  return true;
+}
+
+function initPos() {
+  const cv = document.getElementById('cv');
+  const W  = cv.clientWidth  || 820;
+  const H  = cv.clientHeight || 480;
+  const r  = Math.min(W, H) * 0.33;
+  G.nodes.forEach((n, i) => {
+    if (pos[n.id]) return;
+    const a = (i / Math.max(G.nodes.length, 1)) * 2 * Math.PI - Math.PI / 2;
+    pos[n.id] = { x: W/2 + r * Math.cos(a), y: H/2 + r * Math.sin(a) };
+  });
+}
+
+function ensurePos() {
+  G.nodes.forEach(n => {
+    if (!pos[n.id]) pos[n.id] = { x: 200 + Math.random()*400, y:150 + Math.random()*280 };
+  });
+}
+
+// ── IDs ───────────────────────────────────────────────────────────────────────
+
+function nextId(prefix, arr) {
+  const max = arr.reduce((m, x) => Math.max(m, parseInt(x.id.replace(/\D/g,''))||0), 0);
+  return prefix + String(max + 1).padStart(3, '0');
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+function render() {
+  renderPanels();
+  renderSVG();
+  const opts = G.nodes.map(n =>
+    `<option value="${n.id}">${n.id}: ${esc(n.title.slice(0,28))}</option>`).join('');
+  document.getElementById('ne-f').innerHTML = opts;
+  document.getElementById('ne-t').innerHTML = opts;
+  document.getElementById('nc').textContent = G.nodes.length;
+  document.getElementById('ec').textContent = G.edges.length;
+}
+
+function renderPanels() {
+  document.getElementById('nl').innerHTML = G.nodes.map(n => `
+    <div class="item ${sel&&sel.type==='node'&&sel.id===n.id?'on':''}" onclick="pickNode('${n.id}')">
+      <div class="it">${esc(n.title)}</div>
+      <div class="im">
+        <span class="b ${NBDG[n.type]||'tc'}">${n.type}</span>
+        &nbsp;${n.id}
+        ${n.documents&&n.documents.length ? ` · ${n.documents.length} doc` : ''}
+      </div>
+    </div>`).join('');
+
+  document.getElementById('el').innerHTML = G.edges.map(e => `
+    <div class="item ${sel&&sel.type==='edge'&&sel.id===e.id?'on':''}" onclick="pickEdge('${e.id}')">
+      <div class="it">${esc(e.from)} → ${esc(e.to)}</div>
+      <div class="im">
+        <span class="b ${EBDG[e.type]||'ts'}">${e.type}</span>
+        &nbsp;${e.id}
+        ${!e.rationale ? '<span class="warn"> ⚠ no rationale</span>' : ''}
+      </div>
+      ${e.rationale
+        ? `<div class="im" style="font-style:italic;margin-top:2px">${esc(e.rationale.slice(0,58))}${e.rationale.length>58?'…':''}</div>`
+        : ''}
+    </div>`).join('');
+}
+
+function renderSVG() {
+  // ---- Edges ----
+  document.getElementById('ge').innerHTML = G.edges.map(e => {
+    const fp = pos[e.from], tp = pos[e.to];
+    if (!fp || !tp) return '';
+    const clr  = ECLR[e.type] || '#888';
+    const isSel = sel && sel.type==='edge' && sel.id===e.id;
+    const s    = bpt(fp.x, fp.y, tp.x, tp.y);
+    const en   = bpt(tp.x, tp.y, fp.x, fp.y);
+    const mx   = (s.x + en.x) / 2;
+    const my   = (s.y + en.y) / 2;
+    const noR  = !e.rationale;
+    const mId  = ECLR[e.type] ? `ah-${e.type}` : 'ah-default';
+    return `<g onclick="event.stopPropagation();pickEdge('${e.id}')" style="cursor:pointer">
+      <line x1="${s.x}" y1="${s.y}" x2="${en.x}" y2="${en.y}"
+            stroke="${clr}" stroke-width="${isSel?2.5:1.5}"
+            stroke-dasharray="${noR?'6 3':'none'}"
+            marker-end="url(#${mId})" opacity="${isSel?1:0.7}"/>
+      <text x="${mx}" y="${my-5}" text-anchor="middle" fill="${clr}"
+            font-size="10" font-family="inherit" style="pointer-events:none">${e.type}</text>
+    </g>`;
+  }).join('');
+
+  // ---- Nodes ----
+  document.getElementById('gn').innerHTML = G.nodes.map(n => {
+    const p    = pos[n.id] || { x:200, y:200 };
+    const clr  = NCLR[n.type] || '#888';
+    const isSel = sel && sel.type==='node' && sel.id===n.id;
+    const lbl  = n.title.length > 19 ? n.title.slice(0,19)+'…' : n.title;
+    const lone = !G.edges.some(e => e.from===n.id || e.to===n.id);
+    return `<g style="cursor:pointer"
+               transform="translate(${p.x-NW/2},${p.y-NH/2})"
+               onmousedown="event.stopPropagation();nmd(event,'${n.id}')"
+               onclick="event.stopPropagation()">
+      <rect width="${NW}" height="${NH}" rx="7"
+            fill="${clr}" opacity="${isSel?1:0.87}"
+            stroke="${isSel?'#fff':'none'}" stroke-width="${isSel?2.5:0}"/>
+      <text x="${NW/2}" y="15" text-anchor="middle" fill="#fff"
+            font-size="10" font-weight="700" font-family="inherit"
+            style="pointer-events:none">${esc(n.id)}</text>
+      <text x="${NW/2}" y="30" text-anchor="middle" fill="rgba(255,255,255,0.9)"
+            font-size="10" font-family="inherit"
+            style="pointer-events:none">${esc(lbl)}</text>
+      ${lone?`<circle cx="${NW-7}" cy="7" r="4" fill="#fbbf24" title="isolated"/>`:``}
+    </g>`;
+  }).join('');
+}
+
+// Rectangle boundary point (traveling from cx,cy toward tx,ty)
+function bpt(cx, cy, tx, ty) {
+  const dx = tx-cx, dy = ty-cy;
+  const d  = Math.sqrt(dx*dx+dy*dy) || 1;
+  const nx = dx/d, ny = dy/d;
+  const t  = Math.min(
+    nx ? (NW/2)/Math.abs(nx) : 1e9,
+    ny ? (NH/2)/Math.abs(ny) : 1e9
+  );
+  return { x: cx+nx*t, y: cy+ny*t };
+}
+
+// ── Selection ─────────────────────────────────────────────────────────────────
+
+function pickNode(id) {
+  if (dragged) { dragged=false; return; }
+  sel = { type:'node', id };
+  render(); editNode(id);
+}
+
+function pickEdge(id) {
+  sel = { type:'edge', id };
+  render(); editEdge(id);
+}
+
+function desel() {
+  if (dragged) { dragged=false; return; }
+  sel = null; render(); closeEdit();
+}
+
+// ── Edit panel ────────────────────────────────────────────────────────────────
+
+function openEdit(html) {
+  document.getElementById('editi').innerHTML = html;
+  document.getElementById('editp').classList.add('open');
+}
+function closeEdit() { document.getElementById('editp').classList.remove('open'); }
+
+function typeOpts(list, val, bdg) {
+  return list.map(t =>
+    `<option value="${t}"${t===val?' selected':''}>${t}</option>`).join('');
+}
+
+function editNode(id) {
+  const n = G.nodes.find(x=>x.id===id); if(!n) return;
+  openEdit(`
+    <h3><span class="b ${NBDG[n.type]||'tc'}">${n.type}</span> ${esc(n.id)} — Node
+      <span style="font-weight:400;color:#bbb;font-size:11px">(drag on canvas to reposition)</span>
+    </h3>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:2;min-width:180px">
+        <div class="fr"><label>Title</label><input id="e-ti" value="${escA(n.title)}"/></div>
+        <div class="fr"><label>Type</label><select id="e-ty">${typeOpts(NODE_TYPES,n.type)}</select></div>
+        <div class="fr"><label>Body</label><textarea id="e-bo">${esc(n.body||'')}</textarea></div>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <div class="fr"><label>Documents<br><small style="color:#ccc;font-weight:400">one per line</small></label>
+          <textarea id="e-do" style="min-height:56px">${(n.documents||[]).join('\n')}</textarea>
+        </div>
+      </div>
+    </div>
+    <div class="fa">
+      <button class="bp" onclick="saveNode('${id}')">Save</button>
+      <button class="bd sm" onclick="delNode('${id}')">Delete</button>
+      <button class="bs sm" onclick="desel()">Close</button>
+    </div>`);
+}
+
+function editEdge(id) {
+  const e = G.edges.find(x=>x.id===id); if(!e) return;
+  openEdit(`
+    <h3><span class="b ${EBDG[e.type]||'ts'}">${e.type}</span> ${esc(e.id)} — Edge
+      <span style="font-weight:400;color:#bbb;font-size:11px">${esc(e.from)} → ${esc(e.to)}</span>
+    </h3>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:2;min-width:180px">
+        <div class="fr"><label>Type</label><select id="e-ety">${typeOpts(EDGE_TYPES,e.type)}</select></div>
+        <div class="fr"><label>Rationale</label><textarea id="e-ra">${esc(e.rationale||'')}</textarea></div>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <div class="fr"><label>Documents<br><small style="color:#ccc;font-weight:400">one per line</small></label>
+          <textarea id="e-edo" style="min-height:56px">${(e.documents||[]).join('\n')}</textarea>
+        </div>
+      </div>
+    </div>
+    <div class="fa">
+      <button class="bp" onclick="saveEdge('${id}')">Save</button>
+      <button class="bd sm" onclick="delEdge('${id}')">Delete</button>
+      <button class="bs sm" onclick="desel()">Close</button>
+    </div>`);
+}
+
+function saveNode(id) {
+  const n = G.nodes.find(x=>x.id===id); if(!n) return;
+  pushUndo();
+  n.title     = document.getElementById('e-ti').value.trim();
+  n.type      = document.getElementById('e-ty').value;
+  n.body      = document.getElementById('e-bo').value.trim();
+  n.documents = lines('e-do');
+  save(); render(); editNode(id);
+}
+
+function saveEdge(id) {
+  const e = G.edges.find(x=>x.id===id); if(!e) return;
+  pushUndo();
+  e.type      = document.getElementById('e-ety').value;
+  e.rationale = document.getElementById('e-ra').value.trim();
+  e.documents = lines('e-edo');
+  save(); render(); editEdge(id);
+}
+
+function lines(id) {
+  return document.getElementById(id).value.split('\n').map(s=>s.trim()).filter(Boolean);
+}
+
+// ── Add / Delete ──────────────────────────────────────────────────────────────
+
+function addNode() {
+  const t = document.getElementById('nn-t').value.trim();
+  if (!t) { alert('Title required'); return; }
+  pushUndo();
+  const id = nextId('C', G.nodes);
+  G.nodes.push({ id, title:t, type:document.getElementById('nn-ty').value, body:'', documents:[] });
+  const cv = document.getElementById('cv');
+  pos[id] = {
+    x: (cv.clientWidth||820)/2  + (Math.random()-.5)*300,
+    y: (cv.clientHeight||480)/2 + (Math.random()-.5)*200
+  };
+  document.getElementById('nn-t').value = '';
+  save(); sel={type:'node',id}; render(); editNode(id);
+}
+
+function addEdge() {
+  const from = document.getElementById('ne-f').value;
+  const to   = document.getElementById('ne-t').value;
+  if (!from||!to)   { alert('Select source and target'); return; }
+  if (from===to)    { alert('Source and target must differ'); return; }
+  pushUndo();
+  const id = nextId('E', G.edges);
+  G.edges.push({
+    id, from, to,
+    type: document.getElementById('ne-ty').value,
+    rationale: document.getElementById('ne-r').value.trim(),
+    documents: []
+  });
+  document.getElementById('ne-r').value = '';
+  save(); sel={type:'edge',id}; render(); editEdge(id);
+}
+
+function delNode(id) {
+  pushUndo();
+  G.nodes = G.nodes.filter(n=>n.id!==id);
+  G.edges = G.edges.filter(e=>e.from!==id&&e.to!==id);
+  delete pos[id];
+  sel=null; closeEdit(); save(); render();
+}
+
+function delEdge(id) {
+  pushUndo();
+  G.edges = G.edges.filter(e=>e.id!==id);
+  sel=null; closeEdit(); save(); render();
+}
+
+function clearAll() {
+  if (!confirm('Clear entire graph?')) return;
+  G={nodes:[],edges:[]}; pos={}; sel=null; closeEdit(); save(); render();
+}
+
+// ── Import / Export ───────────────────────────────────────────────────────────
+
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(G, null, 2)], {type:'application/json'});
+  Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob), download:'graph.json'
+  }).click();
+}
+
+function trigImport() { document.getElementById('fi').click(); }
+
+function onImport(ev) {
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (!d.nodes||!d.edges) throw new Error('Expected {nodes, edges}');
+      G=d; pos={}; initPos(); sel=null; closeEdit(); save(); render();
+    } catch(err) { alert('Import error: ' + err.message); }
+  };
+  r.readAsText(f);
+  ev.target.value='';
+}
+
+// ── Drag ─────────────────────────────────────────────────────────────────────
+
+function nmd(e, id) {
+  if (e.button!==0) return;
+  e.preventDefault();
+  // Select on press
+  sel={type:'node',id}; render(); editNode(id);
+
+  const cv  = document.getElementById('cv');
+  const r0  = cv.getBoundingClientRect();
+  const ox  = e.clientX - r0.left - pos[id].x;
+  const oy  = e.clientY - r0.top  - pos[id].y;
+  const sx  = e.clientX, sy = e.clientY;
+
+  function mm(ev) {
+    if (Math.abs(ev.clientX-sx)>3||Math.abs(ev.clientY-sy)>3) dragged=true;
+    const r = cv.getBoundingClientRect();
+    pos[id] = { x: ev.clientX-r.left-ox, y: ev.clientY-r.top-oy };
+    renderSVG();
+  }
+  function mu() {
+    if (dragged) save();
+    document.removeEventListener('mousemove', mm);
+    document.removeEventListener('mouseup',   mu);
+  }
+  document.addEventListener('mousemove', mm);
+  document.addEventListener('mouseup',   mu);
+}
+
+// ── Undo ──────────────────────────────────────────────────────────────────────
+
+const undoStack = [];
+function pushUndo() {
+  undoStack.push({ G: JSON.parse(JSON.stringify(G)), pos: JSON.parse(JSON.stringify(pos)) });
+  if (undoStack.length > 50) undoStack.shift();
+}
+function undo() {
+  const snap = undoStack.pop();
+  if (!snap) return;
+  G = snap.G; pos = snap.pos;
+  sel = null; closeEdit(); save(); render();
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+
+function initKeyboard() {
+  document.addEventListener('keydown', e => {
+    const tag = document.activeElement.tagName;
+    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+    if ((e.key === 'Delete' || e.key === 'Backspace') && !typing) {
+      if (!sel) return;
+      if (sel.type === 'node') delNode(sel.id);
+      else delEdge(sel.id);
+      e.preventDefault();
+    }
+
+    if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !typing) {
+      undo(); e.preventDefault();
+    }
+
+    if (e.key === 'c' && (e.ctrlKey || e.metaKey) && !typing) {
+      if (!sel || sel.type !== 'node') return;
+      clipboard = JSON.parse(JSON.stringify(G.nodes.find(n => n.id === sel.id)));
+      e.preventDefault();
+    }
+
+    if (e.key === 'v' && (e.ctrlKey || e.metaKey) && !typing) {
+      if (!clipboard) return;
+      pushUndo();
+      const id = nextId('C', G.nodes);
+      G.nodes.push({ ...clipboard, id });
+      const src = pos[clipboard.id] || { x: 400, y: 300 };
+      pos[id] = { x: src.x + 40, y: src.y + 40 };
+      sel = { type: 'node', id };
+      save(); render(); editNode(id);
+      e.preventDefault();
+    }
+  });
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escA(s) {
+  return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+async function init() {
+  if (window.location.protocol !== 'file:') {
+    // When served over HTTP, always load G from graph.json so disk is the source of truth.
+    // Positions are kept in localStorage (layout-only, not content).
+    try {
+      const res = await fetch('./graph.json');
+      if (res.ok) {
+        G = await res.json();
+        const p = localStorage.getItem('cg_p');
+        pos = p ? JSON.parse(p) : {};
+        ensurePos();
+      } else {
+        loadStorage() || (G = JSON.parse(JSON.stringify(DEFAULT)));
+        initPos();
+      }
+    } catch {
+      loadStorage() || (G = JSON.parse(JSON.stringify(DEFAULT)));
+      initPos();
+    }
+  } else {
+    if (!loadStorage()) {
+      G = JSON.parse(JSON.stringify(DEFAULT));
+      initPos();
+      save();
+    }
+  }
+  document.getElementById('cv').addEventListener('click', desel);
+  initKeyboard();
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
