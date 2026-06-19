@@ -41,7 +41,9 @@ in that mode graphs are stored in browser localStorage instead of on disk.
 
 - Left panel: node list with type badges
 - Right panel: edge list with rationale preview
-- Centre: SVG canvas with draggable nodes and coloured arrows
+- Centre: SVG canvas with draggable nodes and coloured arrows. Left-click-drag on empty canvas
+  rubber-band selects nodes (ctrl/cmd/shift adds to the selection); right-click-drag pans the
+  view. Pan resets on graph switch — it's a viewport offset, not part of the saved graph.
 - Edit panel: click any node or edge to edit its fields inline
 - Isolated nodes (no edges) are marked with a yellow dot
 - Edges without rationale are shown as dashed lines

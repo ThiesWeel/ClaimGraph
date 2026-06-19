@@ -172,8 +172,10 @@
         <marker id="ah-operationalizes" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#14b8a6"/></marker>
         <marker id="ah-default"         viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#888"/></marker>
       </defs>
-      <g id="ge"></g>
-      <g id="gn"></g>
+      <g id="gview">
+        <g id="ge"></g>
+        <g id="gn"></g>
+      </g>
     </svg>
   </div>
 
@@ -304,6 +306,7 @@ let currentGraph  = 'main';
 let multiSel      = new Set(); // node ids selected (ctrl+click) for folding into one node
 let consolidations = []; // audit/index of fold and extract operations, see consolidations.json
 let cvMarqueeRect  = null; // {x,y,w,h} canvas-local rect while drag-selecting, else null
+let pan            = { x: 0, y: 0 }; // canvas pan offset (view-only, not persisted with the graph)
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 // Each "graph" is a separate named thread/tab of reasoning. When served over HTTP it
@@ -369,6 +372,7 @@ async function loadGraph(name) {
   localStorage.setItem('cg_current_graph', name);
   rememberGraph(name);
   multiSel.clear(); sel = null; closeEdit();
+  pan = { x: 0, y: 0 }; applyPanTransform();
 
   if (window.location.protocol !== 'file:') {
     try {
@@ -1252,14 +1256,14 @@ function nmd(e, id) {
 
   const cv  = document.getElementById('cv');
   const r0  = cv.getBoundingClientRect();
-  const ox  = e.clientX - r0.left - pos[id].x;
-  const oy  = e.clientY - r0.top  - pos[id].y;
+  const ox  = e.clientX - r0.left - pan.x - pos[id].x;
+  const oy  = e.clientY - r0.top  - pan.y - pos[id].y;
   const sx  = e.clientX, sy = e.clientY;
 
   function mm(ev) {
     if (Math.abs(ev.clientX-sx)>3||Math.abs(ev.clientY-sy)>3) dragged=true;
     const r = cv.getBoundingClientRect();
-    pos[id] = { x: ev.clientX-r.left-ox, y: ev.clientY-r.top-oy };
+    pos[id] = { x: ev.clientX-r.left-pan.x-ox, y: ev.clientY-r.top-pan.y-oy };
     renderSVG();
   }
   function mu() {
@@ -1276,6 +1280,39 @@ function nmd(e, id) {
 // a node still moves it (above) rather than starting a marquee. Ctrl/Cmd/Shift held at release
 // adds to the existing selection instead of replacing it; plain ctrl+click on a single node
 // (toggleMultiSel, above) keeps working independently of this.
+// Dispatches empty-canvas mousedown to either rubber-band select (left button) or
+// pan (right button). Both only fire for presses that start on empty canvas, since
+// nodes and edges stopPropagation on their own mousedown.
+function cvMouseDown(e) {
+  if (e.button === 2) { cvPanMouseDown(e); return; }
+  if (e.button === 0) { cvMarqueeMouseDown(e); }
+}
+
+// Right-click drag pans the view by translating #gview. Doesn't touch node `pos` or
+// trigger a save — it's purely a viewport offset, reset per graph switch.
+function cvPanMouseDown(e) {
+  e.preventDefault();
+  const startX = e.clientX, startY = e.clientY;
+  const startPan = { x: pan.x, y: pan.y };
+
+  function mm(ev) {
+    pan.x = startPan.x + (ev.clientX - startX);
+    pan.y = startPan.y + (ev.clientY - startY);
+    applyPanTransform();
+  }
+  function mu() {
+    document.removeEventListener('mousemove', mm);
+    document.removeEventListener('mouseup', mu);
+  }
+  document.addEventListener('mousemove', mm);
+  document.addEventListener('mouseup', mu);
+}
+
+function applyPanTransform() {
+  const g = document.getElementById('gview');
+  if (g) g.setAttribute('transform', `translate(${pan.x},${pan.y})`);
+}
+
 function cvMarqueeMouseDown(e) {
   if (e.button !== 0) return;
   const cv = document.getElementById('cv');
@@ -1312,7 +1349,10 @@ function cvMarqueeMouseDown(e) {
       if (!additive) multiSel.clear();
       G.nodes.forEach(n => {
         const p = pos[n.id]; if (!p) return;
-        const nx0 = p.x - NW/2, ny0 = p.y - NH/2, nx1 = p.x + NW/2, ny1 = p.y + NH/2;
+        // Node positions are in graph space; the marquee rect is in raw canvas space, so
+        // shift by the current pan offset before comparing.
+        const nx0 = p.x + pan.x - NW/2, ny0 = p.y + pan.y - NH/2;
+        const nx1 = p.x + pan.x + NW/2, ny1 = p.y + pan.y + NH/2;
         const overlaps = nx0 < rect.x+rect.w && nx1 > rect.x && ny0 < rect.y+rect.h && ny1 > rect.y;
         if (overlaps) multiSel.add(n.id);
       });
@@ -1403,7 +1443,8 @@ async function init() {
   document.getElementById('nn-ty').innerHTML = typeOpts(NODE_TYPES, NODE_TYPES[0]);
   document.getElementById('ne-ty').innerHTML = typeOpts(EDGE_TYPES, EDGE_TYPES[0]);
   document.getElementById('cv').addEventListener('click', desel);
-  document.getElementById('cv').addEventListener('mousedown', cvMarqueeMouseDown);
+  document.getElementById('cv').addEventListener('mousedown', cvMouseDown);
+  document.getElementById('cv').addEventListener('contextmenu', e => e.preventDefault());
   initKeyboard();
   render();
 }

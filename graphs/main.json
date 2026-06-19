@@ -88,20 +88,63 @@
       "status": "open"
     },
     {
-      "id": "C006",
-      "title": "u_t ~ I(0), when stationarity 'enough'?",
-      "type": "question",
-      "body": "",
+      "id": "C014",
+      "title": "Consolidation task (2 nodes)",
+      "type": "claim",
+      "status": "needs_test",
+      "body": "[CONSOLIDATION TASKED]",
       "documents": [],
-      "status": "open"
-    },
-    {
-      "id": "C007",
-      "title": "Symbolic regression as destillation method?",
-      "type": "question",
-      "body": "this could be a good distil method",
-      "documents": [],
-      "status": "open"
+      "collapsed": true,
+      "consolidation_id": "CS002",
+      "children": {
+        "nodes": [
+          {
+            "id": "C006",
+            "title": "u_t ~ I(0), when stationarity 'enough'?",
+            "type": "question",
+            "body": "",
+            "documents": [],
+            "status": "open"
+          },
+          {
+            "id": "C007",
+            "title": "Symbolic regression as destillation method?",
+            "type": "question",
+            "body": "this could be a good distil method",
+            "documents": [],
+            "status": "open"
+          }
+        ],
+        "edges": [],
+        "boundaryEdges": [
+          {
+            "id": "E004",
+            "from": "C006",
+            "to": "C004",
+            "type": "motivates",
+            "rationale": "This highly depedns on the final form of the research, but it is soemthing to keep in mind, stationarity acoording to coitnegration test could be insufficient for the pipeline idea.",
+            "documents": []
+          },
+          {
+            "id": "E005",
+            "from": "C007",
+            "to": "C004",
+            "type": "motivates",
+            "rationale": "suggestion for ML -> itnerpretable",
+            "documents": []
+          }
+        ],
+        "pos": {
+          "C006": {
+            "x": 781,
+            "y": 584
+          },
+          "C007": {
+            "x": 575,
+            "y": 576
+          }
+        }
+      }
     }
   ],
   "edges": [
@@ -131,7 +174,7 @@
     },
     {
       "id": "E004",
-      "from": "C006",
+      "from": "C014",
       "to": "C004",
       "type": "motivates",
       "rationale": "This highly depedns on the final form of the research, but it is soemthing to keep in mind, stationarity acoording to coitnegration test could be insufficient for the pipeline idea.",
@@ -139,7 +182,7 @@
     },
     {
       "id": "E005",
-      "from": "C007",
+      "from": "C014",
       "to": "C004",
       "type": "motivates",
       "rationale": "suggestion for ML -> itnerpretable",
@@ -223,17 +266,13 @@
       "x": 401,
       "y": 129
     },
-    "C007": {
-      "x": 575,
-      "y": 576
-    },
-    "C006": {
-      "x": 781,
-      "y": 584
-    },
     "C005": {
       "x": 867,
       "y": 494
+    },
+    "C014": {
+      "x": 678,
+      "y": 580
     }
   }
 }
