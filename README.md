@@ -31,8 +31,8 @@ not a hardened server — see [Files](#files) for the one safety property it doe
 ## How to run
 
 Run `python serve.py` from this folder and open `http://localhost:8080`. This is required for
-multi-graph support and consolidation logging (listing/saving `graphs/*.json` and
-`consolidations.json`) to work against real files.
+multi-graph support and consolidation logging (listing/saving `graphs/*.json`,
+`consolidations.json`, and `taskboard.md`) to work against real files.
 
 You can also open `index.html` directly from the filesystem (`file://`) with no server at all;
 in that mode graphs are stored in browser localStorage instead of on disk.
@@ -212,10 +212,15 @@ consolidate it into a single summary node. The intent is that an agent revisitin
 has to read that one node by default instead of the whole chain — consolidating is a manual
 action you take, not something the app decides on its own. There are two modes:
 
-1. Ctrl+click (or Cmd+click) each node you want to consolidate — they get a dashed gold outline.
-2. With 2+ nodes selected, the header shows two options:
-   - **Fold into node** — keeps everything in the current graph.
+1. Select the nodes you want to consolidate, either by ctrl+click (or Cmd+click) on each one,
+   or by click-and-drag on empty canvas to rubber-band select everything in a rectangle (hold
+   ctrl/cmd/shift while releasing to add to the current selection instead of replacing it).
+   Selected nodes get a dashed gold outline.
+2. With 2+ nodes selected, the header shows three options:
+   - **Fold into node** — keeps everything in the current graph, you write the summary.
    - **Extract to new graph** — moves the selected nodes into a brand new graph file.
+   - **Consolidate via agent** — queues the summarizing work for an AI agent instead of writing
+     it yourself (see [Consolidate via agent](#consolidate-via-agent-taskboardmd) below).
 
 ### Fold into node
 
@@ -245,6 +250,28 @@ buried inside another one.
 
 A consolidated node's `documents` and `body` behave exactly like any other node — set its
 document `level` the same way you would for an unconsolidated claim.
+
+### Consolidate via agent (`taskboard.md`)
+
+ClaimGraph does not call an AI agent itself — there is no API key, no model call, anywhere in
+this app. "Consolidate via agent" instead does a normal fold-in-place (same mechanics as
+**Fold into node**: the original nodes/edges are preserved under the new node's `children`),
+but leaves the summary for later:
+
+- The new node's `body` is set to the literal placeholder `[CONSOLIDATION TASKED]`, and its
+  `status` is `needs_test`.
+- A task is appended to `taskboard.md` (created at the project root if it doesn't exist) with
+  the consolidation id, the summary node's id, the source node ids, and step-by-step
+  instructions for whatever reads the file next: read the folded node's `children`, write a
+  self-contained summary, optionally attach `documents`, replace the placeholder, and mark
+  both the consolidation record and the task as done.
+
+The idea is that some external process — a human, or an agent you point at this repo — picks
+up `taskboard.md` on its own schedule and does the actual writing; ClaimGraph's job ends at
+"queue the task and make the queued state visible." Until that happens, the node's edit panel
+shows an explicit "waiting for an agent" notice, and the placeholder text in `body` makes it
+obvious at a glance (in the JSON, in the UI, or to an agent skimming the graph) that this node
+isn't a real summary yet.
 
 ### The white consolidation badge
 
@@ -292,6 +319,10 @@ consolidating a chain. Only go further if the task genuinely requires the origin
 In both cases, `consolidations.json` is what makes "where did this come from" reconstructable
 even after the fact — look up the node's `consolidation_id` there for `source_node_ids`,
 `source_edge_ids`, and `mode` if the node itself doesn't have enough context.
+
+One exception: if `body` is literally `[CONSOLIDATION TASKED]`, it is **not** a real summary —
+treat it the same as an unconsolidated chain and read `children` directly, or better, pick up
+the matching task in `taskboard.md` and do the consolidation properly.
 
 ## AI suggestion protocol (design intent, not implemented)
 
@@ -357,9 +388,10 @@ node.
 | File | Purpose |
 |---|---|
 | `index.html` | The entire application |
-| `serve.py` | Static file server plus `/graphs`, `/save?graph=NAME`, and `/consolidations` endpoints |
+| `serve.py` | Static file server plus `/graphs`, `/save?graph=NAME`, `/consolidations`, and `/taskboard` endpoints |
 | `graphs/main.json` | Example / seed data (imported on first load when served over HTTP) |
-| `consolidations.json` | Project-wide audit log of fold/extract operations, see [Consolidations](#consolidations-consolidationsjson) |
+| `consolidations.json` | Project-wide audit log of fold/extract/agent operations, see [Consolidations](#consolidations-consolidationsjson) |
+| `taskboard.md` | Queued work for an AI agent, see [Consolidate via agent](#consolidate-via-agent-taskboardmd) |
 | `README.md` | This file |
 
 `serve.py` is meant for local development only — there's no auth and it's not hardened for
