@@ -131,6 +131,7 @@
     <span id="foldcount" style="font-size:11px;color:#bbb"></span>
     <button class="bs sm" onclick="foldSelected()">Fold into node</button>
     <button class="bs sm" onclick="extractSelected()">Extract to new graph</button>
+    <button class="bs sm" onclick="consolidateViaAgent()">Consolidate via agent</button>
     <button class="bs sm" onclick="clearMultiSel()">Clear selection</button>
   </span>
   <span class="sp"></span>
@@ -302,6 +303,7 @@ let clipboard    = null; // copied node
 let currentGraph  = 'main';
 let multiSel      = new Set(); // node ids selected (ctrl+click) for folding into one node
 let consolidations = []; // audit/index of fold and extract operations, see consolidations.json
+let cvMarqueeRect  = null; // {x,y,w,h} canvas-local rect while drag-selecting, else null
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 // Each "graph" is a separate named thread/tab of reasoning. When served over HTTP it
@@ -481,6 +483,58 @@ function recordConsolidation(rec) {
   return rec.id;
 }
 
+// ── Taskboard ─────────────────────────────────────────────────────────────────
+// taskboard.md is how ClaimGraph hands work to an AI agent without calling one itself:
+// "Consolidate via agent" appends a task here instead of writing the summary directly.
+
+async function loadTaskboard() {
+  if (window.location.protocol !== 'file:') {
+    try {
+      const res = await fetch('/taskboard');
+      if (res.ok) return await res.text();
+    } catch {}
+  }
+  return localStorage.getItem('cg_taskboard')
+    || '# ClaimGraph Taskboard\n\nTasks for an AI agent to pick up. See README "Consolidate via agent".\n';
+}
+
+async function saveTaskboard(text) {
+  localStorage.setItem('cg_taskboard', text);
+  if (window.location.protocol === 'file:') return;
+  await fetch('/taskboard', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/markdown' },
+    body: text
+  }).catch(() => {});
+}
+
+async function appendTaskboardEntry({ consId, graph, summaryNodeId, sourceIds }) {
+  const block = `
+## Task ${consId} — Consolidate nodes in graph "${graph}"
+
+- Status: pending
+- Consolidation ID: ${consId}
+- Graph: ${graph}
+- Summary node: ${summaryNodeId}
+- Source nodes: ${sourceIds.join(', ')}
+
+### Instructions
+
+1. Open \`graphs/${graph}.json\` and find node \`${summaryNodeId}\`.
+2. Read its \`children.nodes\` and \`children.edges\` — this is the original chain (titles,
+   types, bodies, documents) that was consolidated into this node.
+3. Write a single self-contained summary that captures the essential conclusion of that
+   chain, and replace \`${summaryNodeId}\`'s \`body\` field with it (remove the
+   \`[CONSOLIDATION TASKED]\` placeholder; update its \`title\` too if useful).
+4. Optionally attach one or more \`documents\` entries to \`${summaryNodeId}\` referencing
+   supporting material, with the correct \`level\` (see README → Documents).
+5. In \`consolidations.json\`, set the record with id \`${consId}\` to \`"status": "done"\`.
+6. Mark this task's Status above as \`done\`.
+`;
+  const current = await loadTaskboard();
+  await saveTaskboard(current + block);
+}
+
 function initPos() {
   const cv = document.getElementById('cv');
   const W  = cv.clientWidth  || 820;
@@ -564,7 +618,7 @@ function renderSVG() {
     const my   = (s.y + en.y) / 2;
     const noR  = !e.rationale;
     const mId  = ECLR[e.type] ? `ah-${e.type}` : 'ah-default';
-    return `<g onclick="event.stopPropagation();pickEdge('${e.id}')" style="cursor:pointer">
+    return `<g onclick="event.stopPropagation();pickEdge('${e.id}')" onmousedown="event.stopPropagation()" style="cursor:pointer">
       <line x1="${s.x}" y1="${s.y}" x2="${en.x}" y2="${en.y}"
             stroke="${clr}" stroke-width="${isSel?2.5:1.5}"
             stroke-dasharray="${noR?'6 3':'none'}"
@@ -707,6 +761,9 @@ function editNode(id) {
     <h3><span class="b" style="background:${NCLR[n.type]||'#888'}">${n.type}</span> ${esc(n.id)} — Node
       <span style="font-weight:400;color:#bbb;font-size:11px">(drag on canvas to reposition · ctrl+click to multi-select for folding)</span>
     </h3>
+    ${n.body==='[CONSOLIDATION TASKED]' ? `<div class="im" style="margin-bottom:8px;color:#b45309">
+      ⏳ Waiting for an agent to consolidate this — see <code>taskboard.md</code>.
+    </div>` : ''}
     ${n.collapsed && n.children ? `<div class="im" style="margin-bottom:8px">
       ⊕ Folded chain: ${n.children.nodes.length} node(s), ${n.children.edges.length} internal edge(s).
       ${n.consolidation_id?`Consolidation ${esc(n.consolidation_id)}. `:''}
@@ -950,6 +1007,76 @@ function expandNode(id) {
   sel = null; closeEdit(); save(); render();
 }
 
+// Fold the selected nodes the same way foldSelected does, but instead of asking the user to
+// write the summary, queue the work for an AI agent via taskboard.md. ClaimGraph never calls
+// an agent itself — it writes a task, and leaves the node's body as a visible placeholder
+// until something (a human, or an agent reading taskboard.md) replaces it.
+async function consolidateViaAgent() {
+  const ids = [...multiSel];
+  if (ids.length < 2) return;
+  pushUndo();
+
+  const idSet         = new Set(ids);
+  const childNodes     = G.nodes.filter(n => idSet.has(n.id));
+  const childEdges     = [];
+  const boundaryEdges  = [];
+  G.edges.forEach(e => {
+    const fIn = idSet.has(e.from), tIn = idSet.has(e.to);
+    if (fIn && tIn) childEdges.push(JSON.parse(JSON.stringify(e)));
+    else if (fIn || tIn) boundaryEdges.push(JSON.parse(JSON.stringify(e)));
+  });
+  const childPos = {};
+  ids.forEach(id => { if (pos[id]) childPos[id] = pos[id]; });
+  const cx = ids.reduce((s,id) => s + (pos[id]?pos[id].x:0), 0) / ids.length;
+  const cy = ids.reduce((s,id) => s + (pos[id]?pos[id].y:0), 0) / ids.length;
+
+  G.edges = G.edges.filter(e => !childEdges.some(c => c.id === e.id));
+  G.edges.forEach(e => {
+    if (idSet.has(e.from)) e.from = '__NEW__';
+    if (idSet.has(e.to))   e.to   = '__NEW__';
+  });
+  G.nodes = G.nodes.filter(n => !idSet.has(n.id));
+  ids.forEach(id => delete pos[id]);
+
+  const newId = nextId('C', G.nodes);
+  G.edges.forEach(e => {
+    if (e.from === '__NEW__') e.from = newId;
+    if (e.to   === '__NEW__') e.to   = newId;
+  });
+
+  const consId = nextConsolidationId();
+  const label  = `Consolidation task (${ids.length} nodes)`;
+
+  G.nodes.push({
+    id: newId, title: label, type: 'claim', status: 'needs_test',
+    body: '[CONSOLIDATION TASKED]', documents: [],
+    collapsed: true,
+    consolidation_id: consId,
+    children: { nodes: childNodes, edges: childEdges, boundaryEdges, pos: childPos }
+  });
+  pos[newId] = { x: cx || 300, y: cy || 300 };
+
+  recordConsolidation({
+    id: consId,
+    created_at: new Date().toISOString(),
+    mode: 'fold_in_place',
+    source_graph: currentGraph,
+    target_graph: currentGraph,
+    source_node_ids: ids,
+    source_edge_ids: childEdges.map(e => e.id),
+    summary_node_id: newId,
+    target_start_node_id: null,
+    label,
+    status: 'tasked'
+  });
+
+  await appendTaskboardEntry({ consId, graph: currentGraph, summaryNodeId: newId, sourceIds: ids });
+
+  multiSel.clear();
+  sel = { type:'node', id:newId };
+  save(); render(); renderFoldBar(); editNode(newId);
+}
+
 // Move the selected nodes (and the edges between them) into a brand new graph file,
 // leaving a portal node behind in the current graph. Unlike foldSelected, the original
 // nodes/edges are NOT kept inline anywhere in the current graph — they live in the new
@@ -1144,6 +1271,62 @@ function nmd(e, id) {
   document.addEventListener('mouseup',   mu);
 }
 
+// Windows-style click-and-drag rectangle select on empty canvas. Only fires for presses that
+// start on empty canvas — nodes and edges stopPropagation on their own mousedown, so dragging
+// a node still moves it (above) rather than starting a marquee. Ctrl/Cmd/Shift held at release
+// adds to the existing selection instead of replacing it; plain ctrl+click on a single node
+// (toggleMultiSel, above) keeps working independently of this.
+function cvMarqueeMouseDown(e) {
+  if (e.button !== 0) return;
+  const cv = document.getElementById('cv');
+  const r0 = cv.getBoundingClientRect();
+  const startX = e.clientX - r0.left, startY = e.clientY - r0.top;
+  let started = false, rectEl = null;
+
+  function mm(ev) {
+    const x = ev.clientX - r0.left, y = ev.clientY - r0.top;
+    if (!started && (Math.abs(x-startX) > 3 || Math.abs(y-startY) > 3)) {
+      started = true;
+      rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rectEl.setAttribute('fill', 'rgba(59,130,246,0.12)');
+      rectEl.setAttribute('stroke', '#3b82f6');
+      rectEl.setAttribute('stroke-width', '1');
+      rectEl.setAttribute('stroke-dasharray', '4 3');
+      cv.appendChild(rectEl);
+    }
+    if (started) {
+      const rx = Math.min(startX, x), ry = Math.min(startY, y);
+      const rw = Math.abs(x - startX), rh = Math.abs(y - startY);
+      rectEl.setAttribute('x', rx); rectEl.setAttribute('y', ry);
+      rectEl.setAttribute('width', rw); rectEl.setAttribute('height', rh);
+      cvMarqueeRect = { x: rx, y: ry, w: rw, h: rh };
+    }
+  }
+
+  function mu(ev) {
+    document.removeEventListener('mousemove', mm);
+    document.removeEventListener('mouseup', mu);
+    if (started && cvMarqueeRect) {
+      const rect = cvMarqueeRect;
+      const additive = ev.ctrlKey || ev.metaKey || ev.shiftKey;
+      if (!additive) multiSel.clear();
+      G.nodes.forEach(n => {
+        const p = pos[n.id]; if (!p) return;
+        const nx0 = p.x - NW/2, ny0 = p.y - NH/2, nx1 = p.x + NW/2, ny1 = p.y + NH/2;
+        const overlaps = nx0 < rect.x+rect.w && nx1 > rect.x && ny0 < rect.y+rect.h && ny1 > rect.y;
+        if (overlaps) multiSel.add(n.id);
+      });
+      rectEl.remove();
+      cvMarqueeRect = null;
+      sel = null; closeEdit();
+      renderSVG(); renderFoldBar();
+    }
+  }
+
+  document.addEventListener('mousemove', mm);
+  document.addEventListener('mouseup', mu);
+}
+
 // ── Undo ──────────────────────────────────────────────────────────────────────
 
 const undoStack = [];
@@ -1220,6 +1403,7 @@ async function init() {
   document.getElementById('nn-ty').innerHTML = typeOpts(NODE_TYPES, NODE_TYPES[0]);
   document.getElementById('ne-ty').innerHTML = typeOpts(EDGE_TYPES, EDGE_TYPES[0]);
   document.getElementById('cv').addEventListener('click', desel);
+  document.getElementById('cv').addEventListener('mousedown', cvMarqueeMouseDown);
   initKeyboard();
   render();
 }

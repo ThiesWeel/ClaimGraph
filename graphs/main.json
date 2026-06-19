@@ -40,30 +40,6 @@
       "status": "open"
     },
     {
-      "id": "C005",
-      "title": "How do we model the hedge ratio relation?",
-      "type": "question",
-      "body": "Moving parameters? or not? when do we deem a cointegration relationship to be not valid enough any more?",
-      "documents": [],
-      "status": "open"
-    },
-    {
-      "id": "C006",
-      "title": "u_t ~ I(0), when stationarity 'enough'?",
-      "type": "question",
-      "body": "",
-      "documents": [],
-      "status": "open"
-    },
-    {
-      "id": "C007",
-      "title": "Symbolic regression as destillation method?",
-      "type": "question",
-      "body": "this could be a good distil method",
-      "documents": [],
-      "status": "open"
-    },
-    {
       "id": "C008",
       "title": "Avellanda2008 Residual modelling, good candidate for gated learning",
       "type": "evidence",
@@ -100,6 +76,30 @@
       "title": "Moving Betas and factor, how to manage?",
       "type": "question",
       "body": "If we want to trade cumlative residuals, or potnetially EWMA of the residuals, then we can not have bias that accumelates. What are the most advaced methods for this? what makes sense?",
+      "documents": [],
+      "status": "open"
+    },
+    {
+      "id": "C005",
+      "title": "How do we model the hedge ratio relation?",
+      "type": "question",
+      "body": "Moving parameters? or not? when do we deem a cointegration relationship to be not valid enough any more?",
+      "documents": [],
+      "status": "open"
+    },
+    {
+      "id": "C006",
+      "title": "u_t ~ I(0), when stationarity 'enough'?",
+      "type": "question",
+      "body": "",
+      "documents": [],
+      "status": "open"
+    },
+    {
+      "id": "C007",
+      "title": "Symbolic regression as destillation method?",
+      "type": "question",
+      "body": "this could be a good distil method",
       "documents": [],
       "status": "open"
     }
@@ -200,20 +200,8 @@
       "y": 201
     },
     "C004": {
-      "x": 698,
-      "y": 300
-    },
-    "C005": {
-      "x": 671,
-      "y": 399
-    },
-    "C006": {
-      "x": 599,
-      "y": 471
-    },
-    "C007": {
-      "x": 500,
-      "y": 498
+      "x": 1042,
+      "y": 288
     },
     "C008": {
       "x": 401,
@@ -234,6 +222,18 @@
     "C013": {
       "x": 401,
       "y": 129
+    },
+    "C007": {
+      "x": 575,
+      "y": 576
+    },
+    "C006": {
+      "x": 781,
+      "y": 584
+    },
+    "C005": {
+      "x": 867,
+      "y": 494
     }
   }
 }

@@ -4,6 +4,8 @@ Serve ClaimGraph and accept POST /save?graph=NAME to write graphs/NAME.json back
 GET /graphs lists available graph names (files in graphs/, without the .json suffix).
 GET /consolidations reads consolidations.json (created empty if missing).
 POST /consolidations overwrites consolidations.json.
+GET /taskboard reads taskboard.md (created with a header if missing).
+POST /taskboard overwrites taskboard.md.
 Run from the ClaimGraph directory:  python serve.py
 Then open http://localhost:8080 in your browser.
 """
@@ -16,6 +18,11 @@ from urllib.parse import urlparse, parse_qs
 PORT = 8080
 GRAPHS_DIR = 'graphs'
 CONSOLIDATIONS_FILE = 'consolidations.json'
+TASKBOARD_FILE = 'taskboard.md'
+TASKBOARD_HEADER = (
+    '# ClaimGraph Taskboard\n\n'
+    'Tasks for an AI agent to pick up. See README "Consolidate via agent".\n'
+)
 NAME_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
 class Handler(SimpleHTTPRequestHandler):
@@ -24,13 +31,19 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/graphs':
             os.makedirs(GRAPHS_DIR, exist_ok=True)
             names = sorted(f[:-5] for f in os.listdir(GRAPHS_DIR) if f.endswith('.json'))
-            self._json(200, json.dumps(names).encode())
+            self._respond(200, 'application/json', json.dumps(names).encode())
         elif path == '/consolidations':
             if not os.path.exists(CONSOLIDATIONS_FILE):
                 with open(CONSOLIDATIONS_FILE, 'w') as f:
                     f.write('[]\n')
             with open(CONSOLIDATIONS_FILE, 'rb') as f:
-                self._json(200, f.read())
+                self._respond(200, 'application/json', f.read())
+        elif path == '/taskboard':
+            if not os.path.exists(TASKBOARD_FILE):
+                with open(TASKBOARD_FILE, 'w') as f:
+                    f.write(TASKBOARD_HEADER)
+            with open(TASKBOARD_FILE, 'rb') as f:
+                self._respond(200, 'text/markdown; charset=utf-8', f.read())
         else:
             super().do_GET()
 
@@ -58,6 +71,14 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
+        elif parsed.path == '/taskboard':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            with open(TASKBOARD_FILE, 'wb') as f:
+                f.write(body)
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
         else:
             self.send_response(404)
             self.end_headers()
@@ -69,9 +90,9 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
-    def _json(self, status, body_bytes):
+    def _respond(self, status, content_type, body_bytes):
         self.send_response(status)
-        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Type', content_type)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(body_bytes)

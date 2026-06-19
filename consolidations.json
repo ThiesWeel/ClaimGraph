@@ -1,1 +1,19 @@
-[]
+[
+  {
+    "id": "CS001",
+    "created_at": "2026-06-19T20:04:48.946Z",
+    "mode": "fold_in_place",
+    "source_graph": "main",
+    "target_graph": "main",
+    "source_node_ids": [
+      "C007",
+      "C006",
+      "C005"
+    ],
+    "source_edge_ids": [],
+    "summary_node_id": "C014",
+    "target_start_node_id": null,
+    "label": "Folded chain (3 nodes)",
+    "status": "expanded"
+  }
+]
